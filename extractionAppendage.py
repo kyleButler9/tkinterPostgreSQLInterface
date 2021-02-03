@@ -354,6 +354,7 @@ class ProcessedHardDrives(tk.Frame,DBI):
             sql = DeviceInfo.noteDestroyedHD
         try:
             self.cur.execute(sql,(now,hd,))
+            self.conn.commit()
             if len(self.cur.fetchall()) == 0:
                 self.err.set('Error! Error! provided HD SN '+hd +' isn\'t in system!')
             else:
@@ -373,9 +374,9 @@ class extractionGUI(ttk.Notebook):
         ttk.Notebook.__init__(self,parent,*args)
         self.tab1 = ttk.Frame()
         self.tab2 = ttk.Frame()
-        self.label1 = ProcessedHardDrives(self.tab2,
-                                ini_section=kwargs['ini_section'])
-        self.label2 = InsertDrives(self.tab1,
+        ProcessedHardDrives(self.tab2,
+            ini_section=kwargs['ini_section'])
+        InsertDrives(self.tab1,
             ini_section=kwargs['ini_section'],
             donationID=self.donationIDVar)
         self.add(self.tab1,text="Insert New Drives.")

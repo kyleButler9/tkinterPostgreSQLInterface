@@ -1,4 +1,9 @@
 token.pickle
 database.ini
 sql.py
+/build
 /__pycache__
+/output
+helperAppendage.exe
+helperAppendage.spec
+/dist
