@@ -6,6 +6,58 @@ import re
 from sql import *
 from config import DBI
 
+class InsertLog(tk.Frame,DBI):
+    def __init__(self,parent,*args,**kwargs):
+        tk.Frame.__init__(self,parent,*args)
+        DBI.__init__(self,ini_section = kwargs['ini_section'])
+        deviceQualities = self.fetchall(DeviceInfo.getDeviceQualities)
+        qtypes =[quality[0] for quality in deviceQualities]
+        self.qualityName = tk.StringVar(parent,value="quality:")
+        self.qualityDD = tk.OptionMenu(parent,self.qualityName,"quality:",*qtypes)
+        self.pid = tk.Entry(parent,width=25)
+        self.log = tk.Entry(parent,width=50)
+        self.notes = tk.Text(parent,height=4,width=25)
+        self.pallet = tk.Entry(parent,width=25)
+        self.passBackSelection = tk.Button(parent,
+            text='Log',
+            width = 15,
+            height = 2,
+            bg = "blue",
+            fg = "yellow",
+        )
+        self.pidLabel = tk.Label(parent,text="pid:").grid(column=0,row=2)
+        self.logLabel = tk.Label(parent,text="log:").grid(column=0,row=3)
+        self.notesLabel = tk.Label(parent,text="notes:").grid(column=0,row=4)
+        self.palletlabel = tk.Label(parent,text='location:').grid(column=0,row=0)
+        self.qualityDD.grid(column=1,row=1)
+        self.passBackSelection.bind('<Button-1>',self.logit)
+        self.pid.grid(column=1,row=2)
+        self.log.grid(column=1,row=3)
+        self.notes.grid(column=1,row=4)
+        self.pallet.grid(column=1,row=0)
+        self.passBackSelection.grid(column=1,row=5)
+    def logit(self,event):
+        pid = self.pid.get()
+        quality = self.qualityName.get()
+        log = self.log.get()
+        notes = self.notes.get('1.0',tk.END)
+        pallet = self.pallet.get()
+        back = self.fetchone(testStation.insertLog,quality,False,
+                            log,notes,pid,pallet)
+        bool = True
+        if back == None:
+            bool = False
+            err = 'log not inserted.'
+        else:
+            for id in back:
+                if id == None:
+                    bool = False
+                    err = 'pid not registered.'
+        if bool is True:
+            self.conn.commit()
+            self.pid.delete(0,'end')
+            self.log.delete(0,'end')
+            self.notes.delete('1.0',tk.END)
 
 class SNPK(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
@@ -73,15 +125,27 @@ class AssociatePidAndLicense(tk.Frame,DBI):
         pid = self.pid.get()
         if quality != "quality:":
             sql = testStation.licenseToPid_QualityIncluded
-            #back = self.insertToDB(sql,sn,quality,pid)
             self.cur.execute(sql,(sn,quality,pid,))
         else:
             sql = testStation.licenseToPid
-            #back = self.insertToDB(sql,sn,pid)
             self.cur.execute(sql,(sn,pid,))
-        back = self.cur.fetchall()
-        self.conn.commit()
-        self.err.set(back)
+        back = self.cur.fetchone()
+        bool = True
+        if back == None:
+            bool = False
+            err = 'pid not registered'
+        else:
+            for id in back:
+                if id == None:
+                    bool = False
+                    err = 'license serial number not registered'
+        if bool == True:
+            self.conn.commit()
+            self.err.set('success!')
+            self.pid.delete(0,'end')
+            self.sn.delete(0,'end')
+        else:
+            self.err.set(err)
 class Banner(tk.Frame):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent)
@@ -94,12 +158,13 @@ class testGUI(ttk.Notebook):
         ttk.Notebook.__init__(self,parent,*args)
         self.tab1 = ttk.Frame()
         self.tab2 = ttk.Frame()
-        SNPK(self.tab2,
-            ini_section=kwargs['ini_section'])
-        AssociatePidAndLicense(self.tab1,
-            ini_section=kwargs['ini_section'])
+        self.tab3 = ttk.Frame()
+        SNPK(self.tab3,ini_section=kwargs['ini_section'])
+        InsertLog(self.tab2,ini_section=kwargs['ini_section'])
+        AssociatePidAndLicense(self.tab1,ini_section=kwargs['ini_section'])
         self.add(self.tab1,text="Attach Licenses to Devices")
-        self.add(self.tab2,text="Insert More Licenses")
+        self.add(self.tab2,text="Log Issue")
+        self.add(self.tab3,text="Insert More Licenses")
         #self.add(self.banner)
         self.pack(expand=True,fill='both')
 if __name__ == "__main__":

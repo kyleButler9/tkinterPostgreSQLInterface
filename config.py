@@ -69,6 +69,9 @@ class DBI:
             return out
     def fetchone(self,sql,*args):
         #returns one tuple
+        if self.testConnection() == 0:
+            self.restartConnection(self.ini_section)
+        self.cur = self.conn.cursor()
         if len(args) != 0:
             self.cur.execute(sql,(*args,))
         else:
@@ -77,6 +80,8 @@ class DBI:
 
     def fetchall(self,sql,*args):
         #returns a list of tuples
+        if self.testConnection() == 0:
+            self.restartConnection(self.ini_section)
         if len(args) != 0:
             self.cur.execute(sql,(*args,))
         else:
@@ -84,7 +89,8 @@ class DBI:
         return self.cur.fetchall()
     def testConnection(self):
         try:
-            back = self.fetchone("SELECT 1")
+            self.cur.execute("SELECT 1")
+            back = self.cur.fetchone()[0]
         except:
             back = 0
         finally:

@@ -26,5 +26,6 @@ def batchExecuteSqlCommands(ini_section,commands=testCommand):
 
 
 if __name__ == '__main__':
+    batchExecuteSqlCommands('local_appendage',commands=DBAdmin.dropTablesCommands)
     batchExecuteSqlCommands('local_appendage',commands=DBAdmin.createTableCommands)
     batchExecuteSqlCommands('local_appendage',commands=DBAdmin.initializeDatabaseCommands)
