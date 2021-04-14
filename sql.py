@@ -469,7 +469,7 @@ class DBAdmin:
         """,
         """
         INSERT INTO staff(name)
-        VALUES('Matthew Levis'),('Reginald Price'),('Kyle Butler');
+        VALUES('Employee M'),('Employee R'),('Kyle Butler');
         """,
     )
     dropTablesCommands = (
