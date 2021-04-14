@@ -14,7 +14,7 @@ def config(ini_file='database.ini', ini_section='local_distribution_sheet'):
         for param in params:
             db[param[0]] = param[1]
     else:
-        raise Exception('Section {0} not found in the {1} file'.format(ini_file_section, filename))
+        raise Exception('Section {0} not found in the {1} file'.format(ini_section, ini_file))
 
     return db
 

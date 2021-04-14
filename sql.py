@@ -47,11 +47,66 @@ class DonorInfo:
     AND i.dateReceived = %s
     AND i.lotNumber = %s;
     """
+class tidyup:
+    cutdown = \
+    """
+    delete from processing p1
+        USING processing p2
+    WHERE
+        p1.device_id <> p2.device_id
+        AND p1.pid = p2.pid
+        AND p1.devicehdsn = ''
+        AND p2.devicehdsn !=''
+        AND p1.donation_id = %s;
+    """
+class upsert_future:
+    #the best way to handle this is to have
+    #daily inserts go into a daily table that is then merged by this process
+    #to the master table according to a process like the below
+    sqlTempTableCreation = \
+    """
+    CREATE TEMP TABLE tempProcessing(pids VARCHAR(20),
+        devicesn VARCHAR(100),
+        devicehdsn VARCHAR(100))
+    """
+    sqlUploadMany = \
+    """
+    INSERT INTO tempProcessing(pids,devicesn,devicehdsn)
+    VALUES(%s,%s,%s);
+    """
+    sqlUpsert = \
+    """
+    LOCK TABLE processing IN EXCLUSIVE MODE;
+
+    UPDATE processing
+    SET devicehdsn = tempProcessing.devicehdsn,
+
+    FROM tempProcessing
+    WHERE tempProcessing.pids = processing.pids
+        AND processing.devicehdsn = '';
+
+    INSERT INTO processing(pids,devicesn,devicehdsn)
+    SELECT tempProcessing.pids,
+            tempProcessing.devicesn,
+            tempProcessing.devicehdsn
+    FROM tempProcessing
+    LEFT OUTER JOIN processing ON (processing.pids = tempProcessing.org_name)
+    WHERE processing.pids IS NULL;
+    DROP TABLE fromSheet;
+    """
 class DeviceInfo:
     getStaff = \
     """
     SELECT name
-    FROM staff;
+    FROM staff
+    WHERE active=TRUE;
+    """
+    getStaffqc = \
+    """
+    SELECT name
+    FROM staff
+    WHERE name != %s
+    AND active=TRUE;
     """
     getDeviceTypes = \
     """
@@ -76,9 +131,25 @@ class DeviceInfo:
     VALUES((SELECT dt.type_id
             FROM deviceTypes dt
             WHERE dt.deviceType = %s),
-            %s,%s,%s,(SELECT s.staff_id
+            TRIM(LOWER(%s)),TRIM(LOWER(%s)),LOWER(%s),(SELECT s.staff_id
                     FROM staff s
                     WHERE s.name =%s),%s,%s,%s);
+    """
+    insertDeviceNoHD = \
+    """
+    INSERT INTO processing(deviceType_id,
+        deviceSN,
+        assetTag,
+        staff_id,
+        pid,
+        donation_id,
+        entryDate)
+    VALUES((SELECT dt.type_id
+            FROM deviceTypes dt
+            WHERE dt.deviceType = %s),
+            TRIM(LOWER(%s)),LOWER(%s),(SELECT s.staff_id
+                    FROM staff s
+                    WHERE s.name =%s),LOWER(%s),%s,%s);
     """
     updateDeviceQuality = \
     """
@@ -103,21 +174,41 @@ class DeviceInfo:
     """
     noteWipedHD = \
     """
+    with w as(
     UPDATE processing
     set sanitized = TRUE,
         destroyed = FALSE,
-        wipeDate = %s
-    WHERE deviceHDSN = %s
-    RETURNING device_id;
+        wipeDate = %s,
+        staff_id = (Select staff_id from staff s where s.name = %s)
+    WHERE deviceHDSN = LOWER(%s)
+    RETURNING donation_id as d_id
+    )
+    UPDATE donations
+    SET numwiped = numwiped + 1
+    WHERE donation_id = (select d_id from w)
+    RETURNING numwiped;
+
     """
     noteDestroyedHD = \
     """
+    with w as (
     UPDATE processing
     SET sanitized = FALSE,
         destroyed = TRUE,
-        wipeDate = %s
-    WHERE deviceHDSN = %s
-    RETURNING device_id;
+        wipeDate = %s,
+        staff_id = (Select staff_id from staff s where s.name = %s)
+    WHERE deviceHDSN = LOWER(%s)
+    RETURNING donation_id as d_id
+    )
+    UPDATE donations
+    SET numwiped = numwiped + 1
+    WHERE donation_id = (select d_id from w)
+    RETURNING numwiped;
+    """
+    donationIDFromHDSN = \
+    """
+    SELECT donation_id from processing
+    WHERE devicehdsn = lower(%s);
     """
 class testStation:
     insertLog = \
@@ -130,7 +221,7 @@ class testStation:
         pallet)
     VALUES(%s,%s,%s,%s,(SELECT device_id
                         FROM processing
-                        WHERE pid LIKE %s),%s)
+                        WHERE pid LIKE LOWER(%s)),%s)
     RETURNING mp_id,device_id;
     """
     insertSNPK = \
@@ -160,6 +251,23 @@ class testStation:
     WHERE pid = %s
     RETURNING device_id,license_id;
     """
+    getLog = \
+    """
+    SELECT quality,resolved,issue,notes,pallet
+    FROM missingparts mp
+    INNER JOIN processing p ON mp.device_id=p.device_id
+    WHERE p.pid = %s
+    """
+    updateLog = \
+    """
+    UPDATE missingparts SET
+        quality = %s,
+        resolved = %s,
+        issue = %s,
+        notes = %s,
+        pallet = %s
+    RETURNING mp_id,device_id;
+    """
 class TechStationSQL:
     licenseFromSN = \
     """
@@ -179,12 +287,32 @@ class Report:
     deviceInfo = \
     """
     SELECT dts.deviceType, p.deviceSN, p.deviceHDSN,
-        p.assetTag, p.destroyed, p.sanitized, s.name, p.wipeDate
+        p.assetTag, p.destroyed, p.sanitized, s.nameabbrev,
+        CASE WHEN p.deviceHDSN = '' THEN TO_CHAR(p.entryDate,'MM/DD/YYYY HH24:MI')
+        ELSE TO_CHAR(p.wipeDate,'MM/DD/YYYY HH24:MI')
+        END AS date
     FROM processing p
     INNER JOIN deviceTypes dts on dts.type_id = p.deviceType_id
     INNER JOIN staff s on s.staff_id = p.staff_id
     WHERE p.donation_id = %s
     ORDER BY p.entryDate;
+    """
+    qcInfo = \
+    """
+    SELECT qc.hdserial, TO_CHAR(qc.qcDate,'MM/DD/YYYY'),s.name
+    FROM qualitycontrol qc
+    INNER JOIN staff s on qc.staff_id =s.staff_id
+    WHERE qc.donation_id = %s;
+    """
+    qualityControlLog = \
+    """
+    INSERT INTO qualitycontrol(hdserial,qcDate,donation_id,staff_id)
+    VALUES(%s,%s,%s,
+        (SELECT s.staff_id from staff s
+        WHERE s.name = %s));
+    Update donations
+    set numwiped = 2
+    WHERE donation_id = %s;
     """
 class DBAdmin:
     createTableCommands = (
@@ -200,7 +328,7 @@ class DBAdmin:
         """
         CREATE TABLE donors(
             donor_id SERIAL PRIMARY KEY,
-            name VARCHAR(255),
+            name VARCHAR(255) UNIQUE,
             address VARCHAR(255)
         )
         """,
@@ -208,9 +336,11 @@ class DBAdmin:
         CREATE TABLE donations (
             donation_id SERIAL PRIMARY KEY,
             donor_id INTEGER NOT NULL,
-            lotNumber bigint,
+            lotNumber bigint UNIQUE,
             dateReceived timestamp,
             sheetID varchar(100),
+            numwiped INTEGER DEFAULT 0,
+            report Boolean DEFAULT FALSE,
             FOREIGN KEY (donor_id)
                 REFERENCES donors (donor_id)
         )
@@ -247,9 +377,10 @@ class DBAdmin:
         """
         CREATE TABLE staff (
             staff_id SERIAL PRIMARY KEY,
-            name VARCHAR(255),
+            name VARCHAR(255) UNIQUE,
             password VARCHAR(100),
-            active Boolean
+            active Boolean,
+            nameabbrev VARCHAR(100)
         )
         """,
         """
@@ -260,7 +391,7 @@ class DBAdmin:
             quality_id INTEGER,
             deviceType_id INTEGER,
             deviceSN VARCHAR(100),
-            deviceHDSN VARCHAR(100),
+            deviceHDSN VARCHAR(100) UNIQUE,
             destroyed Boolean,
             sanitized Boolean,
             staff_id INTEGER,
@@ -290,8 +421,14 @@ class DBAdmin:
         """
         CREATE TABLE qualitycontrol(
             qc_id SERIAL PRIMARY KEY,
+            hdserial VARCHAR(255),
+            staff_id INTEGER,
+            qcDate timestamp,
             donation_id INTEGER,
-            hdserial VARCHAR(255)
+            FOREIGN KEY (staff_id)
+                REFERENCES staff (staff_id),
+            FOREIGN KEY (donation_id)
+                REFERENCES donations (donation_id)
         )
         """,
         """

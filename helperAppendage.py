@@ -43,4 +43,5 @@ if __name__ == "__main__":
     deviceSN = re.search('\n(.+?) ',SN_str).group(1)
     snpk = DBI.fetchone(TechStationSQL.licenseFromSN,deviceSN)
     outFilePath = TechStation.writeSerialNumberProductKeyToFile(*snpk)
-    os.system("notepad "+outFilePath)
+    subprocess.run("start notepad "+outFilePath,shell=True)
+    subprocess.run(r"powershell -ExecutionPolicy Bypass -File \\server\Programs\ks\snpk.ps1",shell=True)

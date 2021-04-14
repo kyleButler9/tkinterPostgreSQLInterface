@@ -187,7 +187,7 @@ class NewDonation(tk.Frame,DBI):
         self.donorName = tk.StringVar(parent,value="select a donor:")
         self.donorsDD = tk.OptionMenu(parent,self.donorName,*donors)
         self.insertDonoationButton = tk.Button(parent,
-            text='Create New Donation',
+            text='Insert New Donation',
             width = 15,
             height = 2,
             bg = "blue",
@@ -202,14 +202,14 @@ class NewDonation(tk.Frame,DBI):
         self.lotNumberLabel = tk.Label(parent,text="Lot Number: ")
         self.donorFilterLabel = tk.Label(parent,text="Filter Donors By:")
         self.donorFilterLaunch = tk.Button(parent,
-            text='Update',
+            text='Update Dropdown',
             width = 15,
             height = 2,
             bg = "blue",
             fg = "yellow",
         )
         self.newDonorLaunch = tk.Button(parent,
-            text='New Donor',
+            text='Insert New Donor',
             width = 15,
             height = 2,
             bg = "blue",
@@ -226,8 +226,8 @@ class NewDonation(tk.Frame,DBI):
         self.donorFilterLaunch.grid(row=0,column=2)
         self.lotNumberLabel.grid(row=4,column=0)
         self.lotNumber.grid(row=4,column=1)
-        self.newDonorLaunch.grid(row=5,column=2)
-        self.insertDonoationButton.grid(row=5,column=0)
+        self.newDonorLaunch.grid(row=5,column=0)
+        self.insertDonoationButton.grid(row=5,column=2)
         self.status = tk.StringVar(parent)
         self.statusBar = tk.Label(parent,textvariable=self.status)
         self.statusBar.grid(row=5,column=1)
@@ -245,7 +245,7 @@ class NewDonation(tk.Frame,DBI):
         donorName = self.donorName.get()
         donationDate = self.cal.selection_get()
         lotNumber = self.lotNumber.get()
-        sheetID = createSheet(lotNumber + ' - '+donorName+' - Data Sanitization')
+        sheetID = createSheet(lotNumber + ' - '+donorName+' - Data Sanitization & QC Log')
         if lotNumber == '':
             lotNumber = 0
             statusAppendage = 'with lot number = 0'
@@ -400,7 +400,7 @@ class InsertDeviceType(tk.Frame,DBI):
             self.dtdd['menu'].add_command(label=type[0],
                 command=tk._setit(self.typeVar,type[0]))
 class InsertDrives(tk.Frame,DBI):
-    def __init__(self,parent,*args,**kwargs):
+    def __init__(self,parent,root,*args,**kwargs):
         self.parent = parent
         tk.Frame.__init__(self,parent,*args)
         DBI.__init__(self,ini_section = kwargs['ini_section'])
@@ -434,6 +434,7 @@ class InsertDrives(tk.Frame,DBI):
             fg = "yellow",
         )
         self.insertDeviceButton.bind('<Button-1>',self.insertDevice)
+        root.bind('<Return>',self.insertDevice)
         self.insertDeviceTypeButton = tk.Button(parent,
             text='new Device Type',
             width = 15,
@@ -458,6 +459,11 @@ class InsertDrives(tk.Frame,DBI):
         self.typeDD.grid(row=5,column=1)
         self.successLabel.grid(row=6,column=0)
         self.insertDeviceButton.grid(row=6,column=1)
+        self.lastDeviceSNvar = tk.StringVar(parent)
+        self.lastDeviceHDSNvar = tk.StringVar(parent)
+        tk.Label(parent,text="last entries:").grid(row=8,column=0)
+        tk.Label(parent,textvariable=self.lastDeviceSNvar).grid(row=8,column=1)
+        tk.Label(parent,textvariable=self.lastDeviceHDSNvar).grid(row=8,column=2)
     def NewDTPopUp(self,event):
         popUp = tk.Toplevel(self.parent)
         InsertDeviceType(popUp,ini_section=self.ini_section,
@@ -471,22 +477,33 @@ class InsertDrives(tk.Frame,DBI):
             hdSerial = self.hdSerial.get()
             assetTag = self.assetTag.get()
             type = self.typeName.get()
-            quality = self.qualityName.get()
-            pid = self.pid.get()
-            donationID = self.donationID.get()
-            args =[str(type),str(dSerial),str(hdSerial),
-            str(assetTag),str(staff),str(pid),str(donationID),
-            datetime.datetime.now().strftime('%m/%d/%Y %I:%M:%S')]
-            out = self.insertToDB(DeviceInfo.insertDevice,*args)
-            if quality != "quality:":
-                out = self.insertToDB(DeviceInfo.updateDeviceQuality,quality,dSerial)
-            self.successVar.set(out)
-            googleArgs = [str(-1)] + args[:4]+['','']+args[4:5]+[args[-1]]
-            append_to_sheet(self.sheetIDVar.get(),[googleArgs])
-            self.pid.delete(0,'end')
-            self.dSerial.delete(0,'end')
-            self.hdSerial.delete(0,'end')
-            self.assetTag.delete(0,'end')
+            if type == "device type:":
+                self.successVar.set('please select (or insert) device type')
+            else:
+                quality = self.qualityName.get()
+                pid = self.pid.get()
+                donationID = self.donationID.get()
+                args =[str(type),str(dSerial),str(hdSerial),
+                str(assetTag),str(staff),str(pid),str(donationID),
+                datetime.datetime.now()]
+                if len(str(hdSerial)) > 0:
+                    out = self.insertToDB(DeviceInfo.insertDevice,*args)
+                else:
+                    argsNoHd = args[:2]+args[3:]
+                    out = self.insertToDB(DeviceInfo.insertDeviceNoHD,*argsNoHd)
+                if quality != "quality:":
+                    out = self.insertToDB(DeviceInfo.updateDeviceQuality,quality,dSerial)
+                self.successVar.set(out)
+                self.lastDeviceSNvar.set(str(dSerial))
+                self.lastDeviceHDSNvar.set(str(hdSerial))
+                self.successVar.set(out)
+                googleArgs = [str(-1)] + args[:4]+['','']+args[4:5]+[args[-1].strftime('%m/%d/%Y %I:%M:%S')]
+                append_to_sheet(self.sheetIDVar.get(),[googleArgs])
+                self.pid.delete(0,'end')
+                self.dSerial.delete(0,'end')
+                self.hdSerial.delete(0,'end')
+                self.assetTag.delete(0,'end')
+                self.pid.focus()
 
 class extractionGUI(ttk.Notebook):
     def __init__(self,parent,*args,**kwargs):
@@ -498,13 +515,13 @@ class extractionGUI(ttk.Notebook):
                                 sheetIDVar = self.sheetIDVar)
         ttk.Notebook.__init__(self,parent,*args)
         self.tab1 = ttk.Frame()
-        self.tab2 = ttk.Frame()
+        #self.tab2 = ttk.Frame()
         self.tab3 = ttk.Frame()
-        ProcessedHardDrives(self.tab2,
-            ini_section=kwargs['ini_section'],
-            donationID=self.donationIDVar,
-            sheetID = self.sheetIDVar)
-        InsertDrives(self.tab1,
+        # ProcessedHardDrives(self.tab2,
+        #     ini_section=kwargs['ini_section'],
+        #     donationID=self.donationIDVar,
+        #     sheetID = self.sheetIDVar)
+        InsertDrives(self.tab1,parent,
             ini_section=kwargs['ini_section'],
             donationID=self.donationIDVar,
             sheetID = self.sheetIDVar)
@@ -512,12 +529,12 @@ class extractionGUI(ttk.Notebook):
             ini_section=kwargs['ini_section'],
             donationID=self.donationIDVar)
         self.add(self.tab1,text="Insert New Drives.")
-        self.add(self.tab2,text="Note Wiped Hard Drives.")
+        #self.add(self.tab2,text="Note Wiped Hard Drives.")
         self.add(self.tab3,text="Generate Report")
         #self.add(self.banner)
         self.pack(expand=True,fill='both')
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Hard Drive Extraction Station")
-    app = extractionGUI(root,ini_section='local_appendage')
+    app = extractionGUI(root,ini_section='appendage')
     app.mainloop()
