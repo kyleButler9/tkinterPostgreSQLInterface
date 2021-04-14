@@ -165,8 +165,8 @@ class ProcessedHardDrives(tk.Frame,DBI):
                     self.err.set('Error! Error! provided HD SN '+hd +' isn\'t in system!')
                     pop_up = tk.Toplevel(self.parent)
                     pop_up.title('Deeper Hard Drive Search')
-                    # deeperHardDriveSearch(pop_up,ini_section=self.ini_section,
-                    #                         hdserial=hd,name=name,wipedVar=wiped,sqlupdate=finalizeHDStatus)
+                    deeperHardDriveSearch(pop_up,ini_section=self.ini_section,
+                                         hdserial=hd,name=name,wipedVar=wiped,sqlupdate=finalizeHDStatus)
                 else:
                     self.err.set('success!')
                     if out[0][0] % 50 == 1:
@@ -199,11 +199,11 @@ class deeperHardDriveSearch(tk.Frame,DBI):
         self.hd=tk.StringVar(parent)
         self.hd.set(kwargs['hdserial'])
         self.stringEntry = tk.Entry(parent,width=20,textvariable=self.hd)
-
-        hds = self.fetchall(self.getQuery(self.hd.get()))
+        hds = self.fetchall(self.getQuery(self.hd.get()),self.hd.get())
         hds =[hd[0] for hd in hds]
         self.hdvar = tk.StringVar(parent,value="select a hd:")
-        self.hdDD = tk.OptionMenu(parent,self.hdvar,*hds)
+        self.hdDD = tk.OptionMenu(parent,self.hdvar,"select a hd:",*hds)
+        print('here2')
         self.searchButton = tk.Button(parent,
             text='Search',
             width = 15,
@@ -249,7 +249,7 @@ class deeperHardDriveSearch(tk.Frame,DBI):
                 LENGTH((SELECT value from userinput))-2
             ))
             LIMIT 10;
-            """ % (hd,)
+            """
         else:
             return """
             with userinput as (SELECT %s as value)
@@ -262,11 +262,12 @@ class deeperHardDriveSearch(tk.Frame,DBI):
                 LENGTH((SELECT value from userinput))-3
             ))
             LIMIT 10;
-            """ % (hd,)
+            """
     def search(self,event):
-        hds = self.fetchall(self.getQuery(self.hd.get()))
+        print('here2')
+        hds =self.fetchall(self.getQuery(self.hd.get()),self.hd.get())
         self.hdDD['menu'].delete(0,'end')
-        filtered_hds = self.fetchall(self.getQuery(self.hd.get()))
+        filtered_hds = self.fetchall(self.getQuery(self.hd.get()),self.hd.get())
         for hd in filtered_hds:
             self.hdDD['menu'].add_command(label=hd[0],
                 command=tk._setit(self.hdvar,hd[0]))
