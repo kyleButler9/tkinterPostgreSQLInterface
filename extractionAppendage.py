@@ -419,13 +419,15 @@ class InsertDrives(tk.Frame,DBI):
         self.staffName = tk.StringVar(parent,value="staff:")
         self.staffDD = tk.OptionMenu(parent,self.staffName,"staff:",*snames)
         self.dSerialL = tk.Label(parent,text="Device Serial #:")
+        self.hdSerialIDL = tk.Label(parent,text='Hard Drive PID:')
         self.hdSerialL = tk.Label(parent,text="Hard Drive Serial:")
         self.assetTagL = tk.Label(parent,text="Asset Tag:")
         self.pidL = tk.Label(parent,text="pid:")
-        self.pid = tk.Entry(parent,fg='black',bg='white',width=12)
-        self.dSerial = tk.Entry(parent,fg='black',bg='white',width=10)
-        self.hdSerial = tk.Entry(parent,fg='black',bg='white',width=10)
-        self.assetTag = tk.Entry(parent,fg='black',bg='white',width=10)
+        self.pid = tk.Entry(parent,fg='black',bg='white',width=25)
+        self.dSerial = tk.Entry(parent,fg='black',bg='white',width=25)
+        self.hdSerialID = tk.Entry(parent,fg='black',bg='white',width=25)
+        self.hdSerial = tk.Entry(parent,fg='black',bg='white',width=25)
+        self.assetTag = tk.Entry(parent,fg='black',bg='white',width=25)
         self.insertDeviceButton = tk.Button(parent,
             text='insert',
             width = 15,
@@ -443,7 +445,6 @@ class InsertDrives(tk.Frame,DBI):
             fg = "yellow",
         )
         self.insertDeviceTypeButton.bind('<Button-1>',self.NewDTPopUp)
-        self.insertDeviceTypeButton.grid(row=7,column=0)
         self.successVar = tk.StringVar()
         self.successLabel = tk.Label(parent,textvariable=self.successVar)
         self.pidL.grid(row=1,column=0)
@@ -451,19 +452,22 @@ class InsertDrives(tk.Frame,DBI):
         self.staffDD.grid(row=0,column=1)
         self.dSerialL.grid(row=2,column=0)
         self.dSerial.grid(row=2,column=1)
-        self.hdSerialL.grid(row=3,column=0)
-        self.hdSerial.grid(row=3,column=1)
-        self.assetTagL.grid(row=4,column=0)
-        self.assetTag.grid(row=4,column=1)
-        self.qualityDD.grid(row=5,column=0)
-        self.typeDD.grid(row=5,column=1)
-        self.successLabel.grid(row=6,column=0)
-        self.insertDeviceButton.grid(row=6,column=1)
+        self.hdSerialIDL.grid(row=3,column=0)
+        self.hdSerialID.grid(row=3,column=1)
+        self.hdSerialL.grid(row=4,column=0)
+        self.hdSerial.grid(row=4,column=1)
+        self.assetTagL.grid(row=5,column=0)
+        self.assetTag.grid(row=5,column=1)
+        self.qualityDD.grid(row=6,column=0)
+        self.typeDD.grid(row=6,column=1)
+        self.successLabel.grid(row=7,column=0)
+        self.insertDeviceTypeButton.grid(row=8,column=0)
+        self.insertDeviceButton.grid(row=8,column=1)
         self.lastDeviceSNvar = tk.StringVar(parent)
         self.lastDeviceHDSNvar = tk.StringVar(parent)
-        tk.Label(parent,text="last entries:").grid(row=8,column=0)
-        tk.Label(parent,textvariable=self.lastDeviceSNvar).grid(row=8,column=1)
-        tk.Label(parent,textvariable=self.lastDeviceHDSNvar).grid(row=8,column=2)
+        tk.Label(parent,text="last entries:").grid(row=9,column=0)
+        tk.Label(parent,textvariable=self.lastDeviceSNvar).grid(row=9,column=1)
+        tk.Label(parent,textvariable=self.lastDeviceHDSNvar).grid(row=9,column=2)
     def NewDTPopUp(self,event):
         popUp = tk.Toplevel(self.parent)
         InsertDeviceType(popUp,ini_section=self.ini_section,
@@ -474,6 +478,7 @@ class InsertDrives(tk.Frame,DBI):
             self.successVar.set('please select staff member')
         else:
             dSerial = self.dSerial.get()
+            hdSerialID = self.hdSerialID.get()
             hdSerial = self.hdSerial.get()
             assetTag = self.assetTag.get()
             type = self.typeName.get()
@@ -483,16 +488,58 @@ class InsertDrives(tk.Frame,DBI):
                 quality = self.qualityName.get()
                 pid = self.pid.get()
                 donationID = self.donationID.get()
-                args =[str(type),str(dSerial),str(hdSerial),
+                args =[str(type),str(dSerial),str(hdSerialID),str(hdSerial),
                 str(assetTag),str(staff),str(pid),str(donationID),
                 datetime.datetime.now()]
                 if len(str(hdSerial)) > 0:
-                    out = self.insertToDB(DeviceInfo.insertDevice,*args)
+                    insertDevice = \
+                    """
+                    INSERT INTO processing(deviceType_id,
+                        deviceSN,
+                        hdpid,
+                        deviceHDSN,
+                        assetTag,
+                        staff_id,
+                        pid,
+                        donation_id,
+                        entryDate)
+                    VALUES((SELECT dt.type_id
+                            FROM deviceTypes dt
+                            WHERE dt.deviceType = %s),
+                            TRIM(LOWER(%s)),TRIM(LOWER(%s)),TRIM(LOWER(%s)),LOWER(%s),(SELECT s.staff_id
+                                    FROM staff s
+                                    WHERE s.name =%s),%s,%s,%s);
+                    """
+                    out = self.insertToDB(insertDevice,*args)
                 else:
-                    argsNoHd = args[:2]+args[3:]
-                    out = self.insertToDB(DeviceInfo.insertDeviceNoHD,*argsNoHd)
+                    argsNoHd = args[:2]+args[4:]
+                    insertDeviceNoHD = \
+                    """
+                    INSERT INTO processing(deviceType_id,
+                        deviceSN,
+                        assetTag,
+                        staff_id,
+                        pid,
+                        donation_id,
+                        entryDate)
+                    VALUES((SELECT dt.type_id
+                            FROM deviceTypes dt
+                            WHERE dt.deviceType = %s),
+                            TRIM(LOWER(%s)),LOWER(%s),(SELECT s.staff_id
+                                    FROM staff s
+                                    WHERE s.name =%s),LOWER(%s),%s,%s);
+                    """
+                    out = self.insertToDB(insertDeviceNoHD,*argsNoHd)
                 if quality != "quality:":
-                    out = self.insertToDB(DeviceInfo.updateDeviceQuality,quality,dSerial)
+                    updateDeviceQuality = \
+                    """
+                    UPDATE processing
+                    SET quality_id = (SELECT quality_id
+                                    FROM qualities q
+                                    WHERE q.quality = %s)
+                    WHERE deviceSN = %s;
+                    """
+                    out = self.insertToDB(updateDeviceQuality,quality,dSerial)
                 self.successVar.set(out)
                 self.lastDeviceSNvar.set(str(dSerial))
                 self.lastDeviceHDSNvar.set(str(hdSerial))
@@ -501,6 +548,7 @@ class InsertDrives(tk.Frame,DBI):
                 append_to_sheet(self.sheetIDVar.get(),[googleArgs])
                 self.pid.delete(0,'end')
                 self.dSerial.delete(0,'end')
+                self.hdSerialID.delete(0,'end')
                 self.hdSerial.delete(0,'end')
                 self.assetTag.delete(0,'end')
                 self.pid.focus()
