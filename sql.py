@@ -384,6 +384,28 @@ class DBAdmin:
         )
         """,
         """
+        CREATE TABLE harddrives(
+            hd_id SERIAL PRIMARY KEY,
+            hdpid VARCHAR(25) UNIQUE
+            hdsn VARCHAR(100) UNIQUE,
+            destroyed Boolean,
+            sanitized Boolean,
+            model VARCHAR(100),
+            size VARCHAR(20),
+            wipedate Timestamp
+        )
+        """,
+        """
+        CREATE TABLE computers (
+            computer_id SERIAL PRIMARY KEY,
+            pid VARCHAR(20) UNIQUE,
+            category VARCHAR(20),
+            quality_id INTEGER,
+            deviceType_id INTEGER,
+            deviceSN VARCHAR(100) UNIQUE,
+        )
+        """,
+        """
         CREATE TABLE processing (
             device_id SERIAL PRIMARY KEY,
             pid VARCHAR(20),
@@ -442,6 +464,41 @@ class DBAdmin:
             pallet VARCHAR(20),
             FOREIGN KEY (device_id)
                 REFERENCES processing (device_id)
+        )
+        """,
+        """
+        CREATE TABLE refurbishedDevices(
+            device_id SERIAL PRIMARY KEY,
+            computerID INTEGER,
+            hd_id INTEGER,
+            FOREIGN KEY (computerID)
+                REFERENCES processing (device_id),
+            FOREIGN KEY (hd_id)
+                REFERENCES harddrives (hd_id)
+        )
+        """,
+        """
+        CREATE TABLE internet (
+            internet_id SERIAL PRIMARY KEY,
+            hotspot_meid VARCHAR(25)
+        )
+        """,
+
+        """
+        CREATE TABLE distributedDevices (
+            distdev_id SERIAL PRIMARY KEY,
+            internet_id INTEGER,
+            device_id INTEGER,
+            recipient_id INTEGER NOT NULL,
+            pallet_id INTEGER,
+            FOREIGN KEY (internet_id)
+                REFERENCES internet (internet_id)
+            FOREIGN KEY (device_id)
+                REFERENCES refurbishedDevices (device_id)
+            FOREIGN KEY (recipient_id)
+                REFERENCES recipients (recipient_id),
+            FOREIGN KEY (pallet_id)
+                REFERENCES pallets (pallet_id),
         )
         """,
     )

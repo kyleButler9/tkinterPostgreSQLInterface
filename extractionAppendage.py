@@ -5,7 +5,7 @@ import datetime
 import re
 from sql import *
 from config import DBI
-from demoWriteSheet import *
+#from demoWriteSheet import *
 class DonationBanner(tk.Frame):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent)
@@ -14,10 +14,10 @@ class DonationBanner(tk.Frame):
             self.donationIDVar = kwargs['donationIDVar']
         else:
             self.donationIDVar = tk.StringVar(parent)
-        if 'sheetIDVar' in kwargs:
-            self.sheetIDVar = kwargs['sheetIDVar']
-        else:
-            self.sheetIDVar = tk.StringVar(parent)
+        # if 'sheetIDVar' in kwargs:
+        #     self.sheetIDVar = kwargs['sheetIDVar']
+        # else:
+        #     self.sheetIDVar = tk.StringVar(parent)
         self.companyNameVar = tk.StringVar(parent)
         self.lotNumberVar = tk.StringVar()
         self.dateReceivedVar = tk.StringVar(parent)
@@ -41,8 +41,8 @@ class DonationBanner(tk.Frame):
         self.companyName = tk.Label(parent,textvariable=self.companyNameVar)
         self.dateReceived = tk.Label(parent,textvariable=self.dateReceivedVar)
         self.lotNumber = tk.Label(parent,textvariable=self.lotNumberVar)
-        self.sheetIDVar_ = tk.StringVar()
-        self.sheetID = tk.Label(parent,textvariable=self.sheetIDVar_)
+        #self.sheetIDVar_ = tk.StringVar()
+        #self.sheetID = tk.Label(parent,textvariable=self.sheetIDVar_)
         self.selDonationButton = tk.Button(parent,
             text='Select Donation',
             width = 15,
@@ -63,9 +63,9 @@ class DonationBanner(tk.Frame):
             companyNameVar=self.companyNameVar,
             dateReceivedVar=self.dateReceivedVar,
             lotNumberVar=self.lotNumberVar,
-            donationID=self.donationIDVar,
-            sheetIDVar = self.sheetIDVar,
-            bannerSheetIDVar = self.sheetIDVar_)
+            donationID=self.donationIDVar)
+            #sheetIDVar = self.sheetIDVar,
+            #bannerSheetIDVar = self.sheetIDVar_)
 class SelectDonation(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent,*args)
@@ -75,8 +75,8 @@ class SelectDonation(tk.Frame,DBI):
         self.lotNumberVar = kwargs['lotNumberVar']
         self.donationIDVar = kwargs['donationID']
         self.ini_section = kwargs['ini_section']
-        self.sheetIDVar = kwargs['sheetIDVar']
-        self.sheetIDVar_ = kwargs['bannerSheetIDVar']
+        #self.sheetIDVar = kwargs['sheetIDVar']
+        #self.sheetIDVar_ = kwargs['bannerSheetIDVar']
         DBI.__init__(self)
         self.donorInfoVar = tk.StringVar(parent,value="select donation:")
         donationInfo = self.fetchall(DonorInfo.getDonationHeader,'')
@@ -135,8 +135,8 @@ class SelectDonation(tk.Frame,DBI):
         self.lotNumberVar.set("Lot Number: "+var[2])
         ids = self.fetchone(DonorInfo.getDonationID,*var)
         self.donationIDVar.set(ids[0])
-        self.sheetIDVar.set(ids[1])
-        self.sheetIDVar_.set('Sheet ID: '+ids[1])
+        #self.sheetIDVar.set(ids[1])
+        #self.sheetIDVar_.set('Sheet ID: '+ids[1])
         self.parent.destroy()
 class NewDonor(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
@@ -158,7 +158,6 @@ class NewDonor(tk.Frame,DBI):
             fg = "yellow",
         )
         self.insertDonorButton.bind('<Button-1>',self.insertDonor)
-        parent.bind('<Return>',self.insertDonor)
         self.dnLabel.grid(row=0,column=0)
         self.donorName.grid(row=0,column=1)
         self.daLabel.grid(row=1,column=0)
@@ -245,17 +244,26 @@ class NewDonation(tk.Frame,DBI):
         donorName = self.donorName.get()
         donationDate = self.cal.selection_get()
         lotNumber = self.lotNumber.get()
-        sheetID = createSheet(lotNumber + ' - '+donorName+' - Data Sanitization & QC Log')
+        #sheetID = createSheet(lotNumber + ' - '+donorName+' - Data Sanitization & QC Log')
         if lotNumber == '':
             lotNumber = 0
             statusAppendage = 'with lot number = 0'
         else:
             statusAppendage = ''
-        out = self.insertToDB(DonorInfo.insertNewDonation,
+            insertNewDonation = \
+            """
+            INSERT INTO donations(lotNumber,dateReceived,donor_id)
+            VALUES(%s,%s,(
+                SELECT donor_id
+                FROM donors
+                WHERE name = %s
+            ));
+            """
+        out = self.insertToDB(insertNewDonation,
             lotNumber,
             donationDate,
-            donorName,
-            str(sheetID))
+            donorName)
+            #str(sheetID))
         report = [
             ['Company Name: {}'.format(donorName)],
             ['Date Received: {} '.format(donationDate.strftime('%m/%d/%Y'))],
@@ -264,112 +272,115 @@ class NewDonation(tk.Frame,DBI):
         ]
         cols = 'Drive	Item Type	Item Serial	HD Serial Number	Asset Tag	Destroyed	Data Sanitized	Staff	Entry Date'
         report.append(cols.split('	'))
-        write_to_sheet(str(sheetID),report)
+        #write_to_sheet(str(sheetID),report)
         self.status.set(out+statusAppendage)
-class GenerateReport(tk.Frame,DBI):
-    def __init__(self,parent,*args,**kwargs):
-        tk.Frame.__init__(self,parent,*args)
-        DBI.__init__(self,ini_section = kwargs['ini_section'])
-        self.donationID = kwargs['donationID']
-        if 'sheetID' not in kwargs:
-            self.sheetIDLabel = tk.Label(parent,text='Google Sheet ID:').grid(column=0,row=0)
-            self.sheetID = tk.Entry(parent,fg='black',bg='white',width=40)
-            self.sheetID.grid(column=1,row=0)
-        self.getReportButton = tk.Button(parent,
-            text='Generate New Report',
-            width = 15,
-            height = 2,
-            bg = "blue",
-            fg = "yellow",
-        )
-        self.getReportButton.bind('<Button-1>',self.writeSheet)
-        self.getReportButton.grid(column=1,row=2)
-    def writeSheet(self,event):
-        donationID = self.donationID.get()
-        donationInfo=self.fetchone(Report.donationInfo,donationID)
-        report = [
-            ['Company Name: {}'.format(donationInfo[0])],
-            ['Date Received: {} '.format(donationInfo[1].strftime('%m/%d/%Y'))],
-            ['Lot Number: {}'.format(donationInfo[2])],
-            ['']
-        ]
-        cols = 'Drive	Item Type	Item Serial	HD Serial Number	Asset Tag	Destroyed	Data Sanitized	Staff	Entry Date'
-        report.append(cols.split('	'))
-        devices = self.fetchall(Report.deviceInfo,donationID)
-        drive = [1]
-        for device in devices:
-            dlist = list(device)
-            try:
-                dlist[-1] = dlist[-1].strftime("%m/%d/%Y %H:%M")
-            except:
-                pass
-            finally:
-                report.append(drive + dlist)
-                drive[0]+=1
-        sid = self.sheetID.get()
-        import csv
-        with open('report.csv', 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerows(report)
-        write_to_sheet(sid,report)
-class ProcessedHardDrives(GenerateReport):
-    def __init__(self,parent,*args,**kwargs):
-        #tk.Frame.__init__(self,parent,*args)
-        GenerateReport.__init__(self,parent,
-            ini_section = kwargs['ini_section'],
-            donationID = kwargs['donationID'],
-            sheetID = kwargs['sheetID'])
-        self.sheetID = kwargs['sheetID']
-        #DBI.__init__(self,ini_section = kwargs['ini_section'])
-        self.hdLabel = tk.Label(parent,text="Hard Drive Serial:")
-        self.hd = tk.Entry(parent,fg='black',bg='white',width=15)
-        self.wiperProduct = tk.StringVar(parent,value="Wiped?")
-        self.wiperProductMenu = tk.OptionMenu(parent,self.wiperProduct,
-                                            "Wiped.","Destroyed.")
-        self.finishHDButton = tk.Button(parent,
-            text='submit',
-            width = 15,
-            height = 2,
-            bg = "blue",
-            fg = "yellow",
-        )
-        self.finishHDButton.bind('<Button-1>',self.finishHD)
-        self.updateSheetButton = tk.Button(parent,
-            text='update Sheet',
-            width = 15,
-            height = 2,
-            bg = "blue",
-            fg = "yellow",
-        )
-        self.updateSheetButton.bind('<Button-1>',self.writeSheet)
-        self.err = tk.StringVar()
-        self.errorFlag = tk.Label(parent,textvariable=self.err)
-        self.hdLabel.grid(row=0,column=0)
-        self.hd.grid(row=0,column=1)
-        self.wiperProductMenu.grid(row=1,column=1)
-        self.errorFlag.grid(row=2,column=0)
-        self.finishHDButton.grid(row=2,column=1)
-        self.updateSheetButton.grid(row=3,column=1)
-    def finishHD(self,event):
-        now = datetime.datetime.now()
-        wiped = self.wiperProduct.get()
-        hd = self.hd.get()
-        if wiped == "Wiped.":
-            sql = DeviceInfo.noteWipedHD
-        elif wiped == "Destroyed.":
-            sql = DeviceInfo.noteDestroyedHD
-        try:
-            self.cur.execute(sql,(now,hd,))
-            self.conn.commit()
-            if len(self.cur.fetchall()) == 0:
-                self.err.set('Error! Error! provided HD SN '+hd +' isn\'t in system!')
-            else:
-                self.err.set('success!')
-            self.hd.delete(0,'end')
-        except (Exception, psycopg2.DatabaseError) as error:
-            self.err.set(error)
-        finally:
-            pass
+# class GenerateReport(tk.Frame,DBI):
+#     def __init__(self,parent,*args,**kwargs):
+#         tk.Frame.__init__(self,parent,*args)
+#         DBI.__init__(self,ini_section = kwargs['ini_section'])
+#         self.donationID = kwargs['donationID']
+#         # if 'sheetID' not in kwargs:
+#         #     self.sheetIDLabel = tk.Label(parent,text='Google Sheet ID:').grid(column=0,row=0)
+#         #     self.sheetID = tk.Entry(parent,fg='black',bg='white',width=40)
+#         #     self.sheetID.grid(column=1,row=0)
+#         self.getReportButton = tk.Button(parent,
+#             text='Generate New Report',
+#             width = 15,
+#             height = 2,
+#             bg = "blue",
+#             fg = "yellow",
+#         )
+#         self.getReportButton.bind('<Button-1>',self.writeSheet)
+#         self.getReportButton.grid(column=1,row=2)
+#         self.err=tk.StringVar(parent)
+#         tk.Label(parent,textvariable=self.err).grid(column=1,row=3)
+#     def writeSheet(self,event):
+#         self.err.set('google functionality restricted because compiled into .exe')
+        # donationID = self.donationID.get()
+        # donationInfo=self.fetchone(Report.donationInfo,donationID)
+        # report = [
+        #     ['Company Name: {}'.format(donationInfo[0])],
+        #     ['Date Received: {} '.format(donationInfo[1].strftime('%m/%d/%Y'))],
+        #     ['Lot Number: {}'.format(donationInfo[2])],
+        #     ['']
+        # ]
+        # cols = 'Drive	Item Type	Item Serial	HD Serial Number	Asset Tag	Destroyed	Data Sanitized	Staff	Entry Date'
+        # report.append(cols.split('	'))
+        # devices = self.fetchall(Report.deviceInfo,donationID)
+        # drive = [1]
+        # for device in devices:
+        #     dlist = list(device)
+        #     try:
+        #         dlist[-1] = dlist[-1].strftime("%m/%d/%Y %H:%M")
+        #     except:
+        #         pass
+        #     finally:
+        #         report.append(drive + dlist)
+        #         drive[0]+=1
+        # sid = self.sheetID.get()
+        # import csv
+        # with open('report.csv', 'w', newline='') as f:
+        #     writer = csv.writer(f)
+        #     writer.writerows(report)
+        # write_to_sheet(sid,report)
+# class ProcessedHardDrives(GenerateReport):
+#     def __init__(self,parent,*args,**kwargs):
+#         #tk.Frame.__init__(self,parent,*args)
+#         GenerateReport.__init__(self,parent,
+#             ini_section = kwargs['ini_section'],
+#             donationID = kwargs['donationID'],
+#             sheetID = kwargs['sheetID'])
+#         self.sheetID = kwargs['sheetID']
+#         #DBI.__init__(self,ini_section = kwargs['ini_section'])
+#         self.hdLabel = tk.Label(parent,text="Hard Drive Serial:")
+#         self.hd = tk.Entry(parent,fg='black',bg='white',width=15)
+#         self.wiperProduct = tk.StringVar(parent,value="Wiped?")
+#         self.wiperProductMenu = tk.OptionMenu(parent,self.wiperProduct,
+#                                             "Wiped.","Destroyed.")
+#         self.finishHDButton = tk.Button(parent,
+#             text='submit',
+#             width = 15,
+#             height = 2,
+#             bg = "blue",
+#             fg = "yellow",
+#         )
+#         self.finishHDButton.bind('<Button-1>',self.finishHD)
+#         self.updateSheetButton = tk.Button(parent,
+#             text='update Sheet',
+#             width = 15,
+#             height = 2,
+#             bg = "blue",
+#             fg = "yellow",
+#         )
+#         self.updateSheetButton.bind('<Button-1>',self.writeSheet)
+#         self.err = tk.StringVar()
+#         self.errorFlag = tk.Label(parent,textvariable=self.err)
+#         self.hdLabel.grid(row=0,column=0)
+#         self.hd.grid(row=0,column=1)
+#         self.wiperProductMenu.grid(row=1,column=1)
+#         self.errorFlag.grid(row=2,column=0)
+#         self.finishHDButton.grid(row=2,column=1)
+#         self.updateSheetButton.grid(row=3,column=1)
+#     def finishHD(self,event):
+#         now = datetime.datetime.now()
+#         wiped = self.wiperProduct.get()
+#         hd = self.hd.get()
+#         if wiped == "Wiped.":
+#             sql = DeviceInfo.noteWipedHD
+#         elif wiped == "Destroyed.":
+#             sql = DeviceInfo.noteDestroyedHD
+#         try:
+#             self.cur.execute(sql,(now,hd,))
+#             self.conn.commit()
+#             if len(self.cur.fetchall()) == 0:
+#                 self.err.set('Error! Error! provided HD SN '+hd +' isn\'t in system!')
+#             else:
+#                 self.err.set('success!')
+#             self.hd.delete(0,'end')
+#         except (Exception, psycopg2.DatabaseError) as error:
+#             self.err.set(error)
+#         finally:
+#             pass
 class InsertDeviceType(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         self.parent=parent
@@ -405,7 +416,7 @@ class InsertDrives(tk.Frame,DBI):
         tk.Frame.__init__(self,parent,*args)
         DBI.__init__(self,ini_section = kwargs['ini_section'])
         self.donationID = kwargs['donationID']
-        self.sheetIDVar = kwargs['sheetID']
+        #self.sheetIDVar = kwargs['sheetID']
         deviceTypes = self.fetchall(DeviceInfo.getDeviceTypes)
         dtypes =[type[0] for type in deviceTypes]
         self.typeName = tk.StringVar(parent,value="device type:")
@@ -436,7 +447,7 @@ class InsertDrives(tk.Frame,DBI):
             fg = "yellow",
         )
         self.insertDeviceButton.bind('<Button-1>',self.insertDevice)
-        root.bind('<Return>',self.insertDevice)
+        root.bind('<Control-x>',self.insertDevice)
         self.insertDeviceTypeButton = tk.Button(parent,
             text='new Device Type',
             width = 15,
@@ -488,31 +499,69 @@ class InsertDrives(tk.Frame,DBI):
                 quality = self.qualityName.get()
                 pid = self.pid.get()
                 donationID = self.donationID.get()
-                args =[str(type),str(dSerial),str(hdSerialID),str(hdSerial),
-                str(assetTag),str(staff),str(pid),str(donationID),
-                datetime.datetime.now()]
-                if len(str(hdSerial)) > 0:
+                if len(str(hdSerial)) > 0 and len(str(hdSerialID)) > 0:
+                    args =[str(hdSerialID),str(hdSerial),str(type),
+                            str(dSerial),str(assetTag),str(staff),
+                            str(pid),str(donationID),datetime.datetime.now()]
                     insertDevice = \
                     """
+                    WITH hdinfo as (
+                    INSERT INTO harddrives(hdpid,hdsn)
+                    VALUES(TRIM(LOWER(%s)),TRIM(LOWER(%s)))
+                    RETURNING hd_id
+                    )
                     INSERT INTO processing(deviceType_id,
                         deviceSN,
-                        hdpid,
-                        deviceHDSN,
                         assetTag,
                         staff_id,
                         pid,
                         donation_id,
-                        entryDate)
+                        entryDate,
+                        hd_id)
                     VALUES((SELECT dt.type_id
-                            FROM deviceTypes dt
-                            WHERE dt.deviceType = %s),
-                            TRIM(LOWER(%s)),TRIM(LOWER(%s)),TRIM(LOWER(%s)),LOWER(%s),(SELECT s.staff_id
+                                FROM deviceTypes dt
+                                WHERE dt.deviceType = %s),
+                            TRIM(LOWER(%s)),TRIM(LOWER(%s)),
+                            (SELECT s.staff_id
                                     FROM staff s
-                                    WHERE s.name =%s),%s,%s,%s);
+                                    WHERE s.name =%s),
+                            TRIM(LOWER(%s)),%s,%s,
+                            (select hd_id from hdinfo));
+                    """
+                    out = self.insertToDB(insertDevice,*args)
+                elif len(str(hdSerialID)) > 0:
+                    args =[str(hdSerialID),str(type),
+                            str(dSerial),str(assetTag),str(staff),
+                            str(pid),str(donationID),datetime.datetime.now()]
+                    insertDevice = \
+                    """
+                    WITH hdinfo as (
+                    INSERT INTO harddrives(hdpid)
+                    VALUES(TRIM(LOWER(%s)))
+                    RETURNING hd_id
+                    )
+                    INSERT INTO processing(deviceType_id,
+                        deviceSN,
+                        assetTag,
+                        staff_id,
+                        pid,
+                        donation_id,
+                        entryDate,
+                        hd_id)
+                    VALUES((SELECT dt.type_id
+                                FROM deviceTypes dt
+                                WHERE dt.deviceType = %s),
+                            TRIM(LOWER(%s)),TRIM(LOWER(%s)),
+                            (SELECT s.staff_id
+                                    FROM staff s
+                                    WHERE s.name =%s),
+                            TRIM(LOWER(%s)),%s,%s,
+                            (select hd_id from hdinfo));
                     """
                     out = self.insertToDB(insertDevice,*args)
                 else:
-                    argsNoHd = args[:2]+args[4:]
+                    args =[str(type),str(dSerial),str(assetTag),str(staff),
+                            str(pid),str(donationID),datetime.datetime.now()]
                     insertDeviceNoHD = \
                     """
                     INSERT INTO processing(deviceType_id,
@@ -523,13 +572,15 @@ class InsertDrives(tk.Frame,DBI):
                         donation_id,
                         entryDate)
                     VALUES((SELECT dt.type_id
-                            FROM deviceTypes dt
-                            WHERE dt.deviceType = %s),
-                            TRIM(LOWER(%s)),LOWER(%s),(SELECT s.staff_id
-                                    FROM staff s
-                                    WHERE s.name =%s),LOWER(%s),%s,%s);
+                                FROM deviceTypes dt
+                                WHERE dt.deviceType = %s),
+                            TRIM(LOWER(%s)),TRIM(LOWER(%s)),
+                            (SELECT s.staff_id
+                                FROM staff s
+                                WHERE s.name =%s),
+                            TRIM(LOWER(%s)),%s,%s);
                     """
-                    out = self.insertToDB(insertDeviceNoHD,*argsNoHd)
+                    out = self.insertToDB(insertDeviceNoHD,*args)
                 if quality != "quality:":
                     updateDeviceQuality = \
                     """
@@ -544,41 +595,42 @@ class InsertDrives(tk.Frame,DBI):
                 self.lastDeviceSNvar.set(str(dSerial))
                 self.lastDeviceHDSNvar.set(str(hdSerial))
                 self.successVar.set(out)
-                googleArgs = [str(-1)] + args[:4]+['','']+args[4:5]+[args[-1].strftime('%m/%d/%Y %I:%M:%S')]
-                append_to_sheet(self.sheetIDVar.get(),[googleArgs])
-                self.pid.delete(0,'end')
-                self.dSerial.delete(0,'end')
-                self.hdSerialID.delete(0,'end')
-                self.hdSerial.delete(0,'end')
-                self.assetTag.delete(0,'end')
-                self.pid.focus()
+                #googleArgs = [str(-1)] + args[:4]+['','']+args[4:5]+[args[-1].strftime('%m/%d/%Y %I:%M:%S')]
+                #append_to_sheet(self.sheetIDVar.get(),[googleArgs])
+                if out == "success!":
+                    self.pid.delete(0,'end')
+                    self.dSerial.delete(0,'end')
+                    self.hdSerialID.delete(0,'end')
+                    self.hdSerial.delete(0,'end')
+                    self.assetTag.delete(0,'end')
+                    self.pid.focus()
 
 class extractionGUI(ttk.Notebook):
     def __init__(self,parent,*args,**kwargs):
         self.donationIDVar = tk.StringVar()
-        self.sheetIDVar = tk.StringVar()
+        #self.sheetIDVar = tk.StringVar()
         self.donorIdentifier = DonationBanner(parent,
                                 ini_section=kwargs['ini_section'],
-                                donationIDVar = self.donationIDVar,
-                                sheetIDVar = self.sheetIDVar)
+                                donationIDVar = self.donationIDVar)
+                                #sheetIDVar = self.sheetIDVar)
         ttk.Notebook.__init__(self,parent,*args)
         self.tab1 = ttk.Frame()
         #self.tab2 = ttk.Frame()
-        self.tab3 = ttk.Frame()
+        #self.tab3 = ttk.Frame()
         # ProcessedHardDrives(self.tab2,
         #     ini_section=kwargs['ini_section'],
         #     donationID=self.donationIDVar,
         #     sheetID = self.sheetIDVar)
         InsertDrives(self.tab1,parent,
             ini_section=kwargs['ini_section'],
-            donationID=self.donationIDVar,
-            sheetID = self.sheetIDVar)
-        GenerateReport(self.tab3,
-            ini_section=kwargs['ini_section'],
             donationID=self.donationIDVar)
+            #sheetID = self.sheetIDVar)
+        # GenerateReport(self.tab3,
+        #     ini_section=kwargs['ini_section'],
+        #     donationID=self.donationIDVar)
         self.add(self.tab1,text="Insert New Drives.")
         #self.add(self.tab2,text="Note Wiped Hard Drives.")
-        self.add(self.tab3,text="Generate Report")
+        #self.add(self.tab3,text="Generate Report")
         #self.add(self.banner)
         self.pack(expand=True,fill='both')
 if __name__ == "__main__":

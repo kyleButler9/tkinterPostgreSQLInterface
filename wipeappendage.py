@@ -1,84 +1,11 @@
 from config import DBI;
 import tkinter as tk
 import datetime
-from demoWriteSheet import *
+#from demoWriteSheet import *
 import wiperSQL as sql
-from extractionAppendage import *
 import psycopg2
-from pathlib import Path
-from os.path import join
-from multiprocessing import Process
-# class GenerateReport(tk.Frame,DBI):
-#     def __init__(self,parent,*args,**kwargs):
-#         tk.Frame.__init__(self,parent,*args)
-#         DBI.__init__(self,ini_section = kwargs['ini_section'])
-#         self.donationID = kwargs['donationID']
-#         if 'sheetID' not in kwargs:
-#             self.sheetIDLabel = tk.Label(parent,text='Google Sheet ID:').pack()
-#             self.sheetID = tk.Entry(parent,fg='black',bg='white',width=40)
-#             self.sheetID.pack()
-#         self.getReportButton = tk.Button(parent,
-#             text='Generate New Report',
-#             width = 15,
-#             height = 2,
-#             bg = "blue",
-#             fg = "yellow",
-#         )
-#         self.getReportButton.bind('<Button-1>',self.createTextFile)
-#         self.getReportButton.pack()
-#     def writeSheet(self,event):
-#         donationID = self.donationID.get()
-#         print(donationID)
-#         print('\n\n\n'
-#         )
-#         donationInfo=self.fetchone(sql.Report.donationInfo,donationID)
-#         report = [
-#             ['Company Name: {}'.format(donationInfo[0])],
-#             ['Date Received: {} '.format(donationInfo[1].strftime('%m/%d/%Y'))],
-#             ['Lot Number: {}'.format(donationInfo[2])],
-#             ['']
-#         ]
-#         cols = 'Drive	Item Type	Item Serial	HD Serial Number	Asset Tag	Destroyed	Data Sanitized	Staff	Entry Date'
-#         report.append(cols.split('	'))
-#         devices = self.fetchall(sql.Report.deviceInfo,donationID)
-#         print(devices)
-#         print('\n\n\n')
-#         drive = [1]
-#         for device in devices:
-#             dlist = list(device)
-#             try:
-#                 dlist[-1] = dlist[-1].strftime("%m/%d/%Y %H:%M")
-#             except:
-#                 pass
-#             finally:
-#                 report.append(drive + dlist)
-#                 drive[0]+=1
-#         sid = self.sheetID.get()
-#         import csv
-#         with open('report.csv', 'w', newline='') as f:
-#             writer = csv.writer(f)
-#             writer.writerows(report)
-#         print(report)
-#         write_to_sheet(sid,report)
-#     def createTextFile(self,event):
-#         report = list()
-#         cols = 'Drive	Item Type	Item Serial	HD Serial Number	Asset Tag	Destroyed	Data Sanitized	Staff	Entry Date'
-#         report.append(cols.split('\t'))
-#         devices = self.fetchall(sql.Report.deviceInfo,donationID)
-#     def devicesToTabDelimitedFile(self,donationID):
-#         devices = self.fetchall(sql.Report.deviceInfo,donationID)
-#         drive = [1]
-#         report = []
-#         for device in devices:
-#             dlist = list(device)
-#             try:
-#                 dlist[-1] = dlist[-1].strftime("%m/%d/%Y %H:%M")
-#             except:
-#                 pass
-#             finally:
-#                 report.append(tuple(drive + dlist))
-#                 drive[0]+=1
-#         return tuple(report)
+
+from reportsAppendage import *
 
 class ProcessedHardDrives(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
@@ -163,7 +90,7 @@ class ProcessedHardDrives(tk.Frame,DBI):
         tk.Label(parent,textvariable=self.hdLog).pack()
         self.updatehdsnbutton.pack()
     def getHdsnInfo(self,event):
-        pop_up = tk.TopLevel(self.parent)
+        pop_up = tk.Toplevel(self.parent)
         kwargs = dict()
         kwargs['ini_section']=self.ini_section
         if self.hdpid.index('end') != 0:
@@ -175,7 +102,7 @@ class ProcessedHardDrives(tk.Frame,DBI):
     def updatehdsn(self,event):
         updatehdSQL = \
         """
-        UPDATE processing
+        UPDATE harddrives
             set devicehdsn = %s
             WHERE {}
             RETURNING device_id;
@@ -189,23 +116,28 @@ class ProcessedHardDrives(tk.Frame,DBI):
         self.hd.delete(0,'end')
         self.hdpid.delete(0,'end')
     def finishHD(self,event):
+        name = self.staffName.get()
         if name == "staff:":
             self.err.set('select a staff from the drop down.')
             return self
         hdStatusUpdate = \
         """
         with logHdStatus as(
-        UPDATE processing
+        UPDATE harddrives
         set {},
             wipeDate = %s,
             staff_id = (Select staff_id from staff s where s.name = %s)
         WHERE {}
-        RETURNING donation_id as d_id,deviceHDSN as HDSN
+        RETURNING hd_id,hdsn
         )
         UPDATE donations
-        SET numwiped = numwiped + 1
-        WHERE donation_id = (select d_id from logHdStatus)
-        RETURNING numwiped,(select HDSN from logHdStatus);
+        SET numwiped = (CASE WHEN numwiped is not null THEN (numwiped + 1) ELSE 0 END)
+        WHERE donation_id = (
+                            SELECT donation_id
+                            FROM processing
+                            WHERE hd_id = (SELECT hd_id FROM logHdStatus)
+                            )
+        RETURNING numwiped,(select hdsn from logHdStatus),(select hd_id from logHdStatus),donation_id;
         """
         wiped = self.wiperProduct.get()
         if wiped == "Wiped.":
@@ -213,14 +145,14 @@ class ProcessedHardDrives(tk.Frame,DBI):
         elif wiped == "Destroyed.":
             wipedOrDestroyed="sanitized = FALSE, destroyed = TRUE"
         if self.hdpid.index("end") != 0:
-            hardDriveIdentifier = "hdpid = %s" % (self.hdpid.get(),)
+            hardDriveIdentifier = "hdpid = LOWER('%s')" % (self.hdpid.get(),)
         else:
-            hardDriveIdentifier = "devicehdsn = %s" % (self.hd.get(),)
+            hardDriveIdentifier = "devicehdsn = LOWER('%s')" % (self.hd.get(),)
         hdStatusUpdate = hdStatusUpdate.format(wipedOrDestroyed,hardDriveIdentifier)
         try:
             now = datetime.datetime.now()
-            name = self.staffName.get()
             out = self.fetchone(hdStatusUpdate,now,name)
+            self.conn.commit()
             if len(out) == 0:
                 self.err.set('Error! Error! provided '+ hardDriveIdentifier +' isn\'t in system!')
                 pop_up = tk.Toplevel(self.parent)
@@ -228,13 +160,16 @@ class ProcessedHardDrives(tk.Frame,DBI):
                 deeperHardDriveSearch(pop_up,ini_section=self.ini_section,
                                      hdserial=hd,name=name,wipedVar=wiped,sqlupdate=finalizeHDStatus)
             else:
-                self.err.set('success! Its been {} drives sence QC'.format(int(out[0][0])-1))
-                if out[0][0] % 50 == 1:
-                    self.qualityCheck(name,hd,wiped)
+                print(out)
+                if out[0] == 0:
+                    self.err.set('First HD for Lot. Please do Quality Check.')
+                    self.qualityCheck(name,out[1],wiped,hd_id=out[2],donation_id=out[3])
+                else:
+                    self.err.set('success! Its been {} drives sence QC'.format(out[0]-1))
                 self.hdpidVal = self.hdpid.get()
-                self.hdVal=out[0][1]
-                self.hdpidLog.set('HD PID: %s' % (self.hdpidVal.get(),))
-                self.hdLog.set('HD SN: %s' % (self.hdVal.get(),))
+                self.hdVal=out[1]
+                self.hdpidLog.set('HD PID: %s' % (self.hdpidVal,))
+                self.hdLog.set('HD SN: %s' % (self.hdVal,))
                 self.hd.delete(0,'end')
                 self.hdpid.delete(0,'end')
         except (Exception, psycopg2.DatabaseError) as error:
@@ -247,11 +182,18 @@ class ProcessedHardDrives(tk.Frame,DBI):
         Report(pop_up,ini_section=self.ini_section)
     def manualQC(self,event):
         self.qualityCheck(self.staffName.get(),self.hd.get(),self.wiperProduct.get())
-    def qualityCheck(self,name,hd,status):
+    def qualityCheck(self,name,hd,status,**kwargs):
         pop_up = tk.Toplevel(self.parent)
         pop_up.title('Quality Check')
-        qc(pop_up,name=name,hdserial=hd,status=status,
-            ini_section=self.ini_section)
+        if 'donation_id' in kwargs:
+            qc(pop_up,name=name,hdserial=hd,status=status,
+                ini_section=self.ini_section,
+                donation_id = kwargs['donation_id'],
+                hd_id = kwargs['hd_id'])
+        else:
+            qc(pop_up,name=name,hdserial=hd,status=status,
+                ini_section=self.ini_section,
+                hd_id=kwargs['hd_id'])
 class deeperHardDriveSearch(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent,*args)
@@ -266,7 +208,6 @@ class deeperHardDriveSearch(tk.Frame,DBI):
         hds =[hd[0] for hd in hds]
         self.hdvar = tk.StringVar(parent,value="select a hd:")
         self.hdDD = tk.OptionMenu(parent,self.hdvar,"select a hd:",*hds)
-        print('here2')
         self.searchButton = tk.Button(parent,
             text='Search',
             width = 15,
@@ -304,10 +245,10 @@ class deeperHardDriveSearch(tk.Frame,DBI):
             return """
             with userinput as (SELECT %s as value)
             SELECT devicehdsn
-            FROM processing
+            FROM harddrives
             WHERE destroyed = FALSE
             AND sanitized = FALSE
-            AND devicehdsn ~* (SELECT SUBSTRING(
+            AND hdsn ~* (SELECT SUBSTRING(
                 (SELECT value from userinput),2,
                 LENGTH((SELECT value from userinput))-2
             ))
@@ -316,11 +257,11 @@ class deeperHardDriveSearch(tk.Frame,DBI):
         else:
             return """
             with userinput as (SELECT %s as value)
-            SELECT devicehdsn
-            FROM processing
+            SELECT hdsn
+            FROM harddrives
             WHERE destroyed = FALSE
             AND sanitized = FALSE
-            AND devicehdsn ~* (SELECT SUBSTRING(
+            AND hdsn ~* (SELECT SUBSTRING(
                 (SELECT value from userinput),3,
                 LENGTH((SELECT value from userinput))-3
             ))
@@ -348,15 +289,15 @@ class HdFacts(tk.Frame,DBI):
         tk.Frame.__init__(self,parent,*args)
         self.parent=parent
         DBI.__init__(self,ini_section = kwargs['ini_section'])
-        self.hdpidL=tk.Label(parent,text='HD PID:')
+        hdpidL=tk.Label(parent,text='HD PID:')
         self.hdpid=tk.Entry(parent,width=25)
-        self.devicehdsnL=tk.Label(parent,text='HD SN:')
+        devicehdsnL=tk.Label(parent,text='HD SN:')
         self.devicehdsn=tk.Entry(parent,width=25)
         self.lotNumber=tk.StringVar(parent)
         self.donorName=tk.StringVar(parent)
         self.name=tk.StringVar(parent)
         self.entryDate=tk.StringVar(parent)
-        self.wipedate=tk.StringVar(parent)
+        self.wipeDate=tk.StringVar(parent)
         self.devicesn=tk.StringVar(parent)
         lotNumberL=tk.Label(parent,textvariable=self.lotNumber)
         donorNameL=tk.Label(parent,textvariable=self.donorName)
@@ -366,24 +307,24 @@ class HdFacts(tk.Frame,DBI):
         devicesnL=tk.Label(parent,textvariable=self.devicesn)
         self.SqlGetHdInfo = \
         """
-        SELECT don.lotnumber,d.name,s.name
-                p.entrydate,p.wipedate,
-                p.devicesn,p.devicehdsn,p.hdpid,
+        SELECT don.lotnumber,d.name,s.name,
+                p.entrydate,hd.wipedate,
+                p.devicesn,hd.hdsn,hd.hdpid
         FROM processing p
+        INNER JOIN harddrives hd USING (hd_id)
         INNER JOIN donations don USING (donation_id)
         INNER JOIN donors d USING (donor_id)
-        INNER JOIN staff s USING (staff_id)
-        WHERE p.{};
+        INNER JOIN staff s ON s.staff_id=hd.staff_id
+        WHERE hd.{};
         """
         if 'hdpid' in kwargs:
-            rowIdentifier='hdpid = %s' % (kwargs['hdpid'],)
+            rowIdentifier="hdpid = LOWER('%s')" % (kwargs['hdpid'],)
             self.hdpid.insert(0,kwargs['hdpid'])
         else:
-            rowIdentifier='devicehdsn = %s' % (kwargs['hdsn'],)
+            rowIdentifier="hdsn = LOWER('%s')" % (kwargs['hdsn'],)
             self.hdsn.insert(0,kwargs['hdsn'])
         hdInfo=self.fetchone(self.SqlGetHdInfo.format(rowIdentifier))
         self.updateFrame(hdInfo)
-
         hdpidL.pack()
         self.hdpid.pack()
         devicehdsnL.pack()
@@ -424,7 +365,7 @@ class HdFacts(tk.Frame,DBI):
         try:
             self.lotNumber.set('lotnumber: '+str(hdInfo[0]))
             self.donorName.set('donorName: '+str(hdInfo[1]))
-            self.name.set('name: '+str(hdInfo[2]))
+            self.name.set('Wiper name: '+str(hdInfo[2]))
             self.entryDate.set('entryDate: '+str(hdInfo[3]))
             self.wipedate.set('wipedate: '+str(hdInfo[4]))
             self.devicesn.set('devicesn: '+str(hdInfo[5]))
@@ -444,22 +385,36 @@ class qc(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent,*args)
         self.hd = kwargs['hdserial']
+        if "hd_id" in kwargs:
+            self.hd_id = kwargs['hd_id']
+        else:
+            hd_idSQL = \
+            """
+            SELECT hd_id
+            FROM harddrives
+            WHERE hdsn = LOWER(%s);
+            """
+            self.hd_id = self.fetchone(hd_idSQL,self.hd)[0]
         self.hdstatus=kwargs['status']
         DBI.__init__(self,ini_section = kwargs['ini_section'])
-        if 'donationID' in kwargs:
-            self.donation_id = kwargs['donationID']
+        if 'donation_id' in kwargs:
+            self.donation_id = kwargs['donation_id']
         else:
-            self.donation_id = self.fetchone(sql.DeviceInfo.donationIDFromHDSN,self.hd)[0]
+            donationIDFromHDSN= \
+            """
+            SELECT donation_id
+            FROM processing
+            INNER JOIN harddrives hd USING (hd_id)
+            WHERE hd.hdsn = lower(%s);
+            """
+            self.donation_id = self.fetchone(donationIDFromHDSN,self.hd)[0]
         stafflist = self.fetchall(sql.DeviceInfo.getStaffqc,kwargs['name'])
         snames =[staff[0] for staff in stafflist]
         self.staffName = tk.StringVar(parent,value="staff:")
         self.staffDD = tk.OptionMenu(parent,self.staffName,"staff:",*snames)
         instructions=tk.Label(parent,text='please get another staff member to perform quality check\nfor hard drive:').pack()
         hdlabel = tk.Label(parent,text =self.hd).pack()
-        self.wiperProduct = tk.StringVar(parent,value="Wiped?")
-        self.wiperProductMenu = tk.OptionMenu(parent,self.wiperProduct,
-                                            "Wiped.","Destroyed.")
-        self.wiperProductMenu.pack()
+        self.wiperProduct = tk.Label(parent,text="HD is " + kwargs['status']).pack()
         self.staffDD.pack()
         logQC = tk.Button(parent,
             text='log QC',
@@ -470,7 +425,7 @@ class qc(tk.Frame,DBI):
         )
         logQC.bind('<Button-1>',self.logQC)
         logQC.pack()
-        self.err = tk.StringVar()
+        self.err = tk.StringVar(parent)
         tk.Label(parent,textvariable=self.err).pack()
     def logQC(self,event):
         now = datetime.datetime.now()
@@ -479,244 +434,25 @@ class qc(tk.Frame,DBI):
             try:
                 qualityControlLog = \
                 """
-                INSERT INTO qualitycontrol(hdserial,qcDate,donation_id,staff_id)
+                INSERT INTO qualitycontrol(hd_id,qcDate,donation_id,staff_id)
                 VALUES(%s,%s,%s,
                     (SELECT s.staff_id from staff s
                     WHERE s.name = %s));
                 Update donations
-                set numwiped = 2
+                set numwiped = 1
                 WHERE donation_id = %s;
                 """
-                self.cur.execute(qualityControlLog,
-                    (self.hd,now,self.donation_id,name,self.donation_id))
-                self.conn.commit()
-                self.err.set('success!')
+                out=self.insertToDB(qualityControlLog,self.hd_id,now,self.donation_id,name,self.donation_id)
+                self.err.set(out)
             except (Exception, psycopg2.DatabaseError) as error:
                 self.err.set(error)
             finally:
                 pass
         else:
             self.err.set('select a staff from the drop down.')
-class InvestigateLots(DonationBanner,DBI):
-    def __init__(self,parent,*args,**kwargs):
-        #DonationBanner.__init__(self,parent,ini_section=kwargs['ini_section'])
-        self.donationIDVar=kwargs['donationID']
-        DBI.__init__(self,ini_section = kwargs['ini_section'])
-        self.getInfoButton = tk.Button(parent,
-            text='Get Info',
-            width = 15,
-            height = 2,
-            bg = "blue",
-            fg = "yellow",
-        )
-        self.getInfoButton.bind('<Button-1>',self.getInfo)
-        self.num_HDSN=tk.StringVar(parent,value="Hard Drive Count: ")
-        self.num_SN=tk.StringVar(parent,value="Device Count: ")
-        self.how_many_HDs_left=tk.StringVar(parent,value="Count Remaining: ")
-        tk.Label(parent,textvariable=self.num_HDSN).pack()
-        tk.Label(parent,textvariable=self.num_SN).pack()
-        tk.Label(parent,textvariable=self.how_many_HDs_left).pack()
-        self.err = tk.StringVar(parent)
-        tk.Label(parent,textvariable=self.err).pack()
-        self.getInfo(None)
-
-    def getInfo(self,event):
-        donationID=self.donationIDVar.get()
-        if len(donationID) == 0:
-            self.err.set('Please select a donation.')
-            return self
-        getInfo = \
-        """
-        SELECT count(DISTINCT devicehdsn),count(DISTINCT devicesn)
-        FROM processing
-        WHERE donation_id = %s;
-        """ % (donationID)
-        res = self.fetchone(getInfo)
-        print(res)
-        msg=dict()
-        self.num_HDSN.set("Hard Drive Count: " + str(res[0]))
-        self.num_SN.set("Device Count: "+str(res[1]))
-        queryPartiallyCompletedLot = \
-        """
-        SELECT count(devicehdsn) as howmanyleft
-        from processing
-        inner join donations USING (donation_id)
-        where destroyed=FALSE and sanitized=FALSE
-        and donation_id = %s
-        group by donation_id;
-        """ % (donationID,)
-        hmlRes=self.fetchone(queryPartiallyCompletedLot)
-        if len(hmlRes) !=0:
-            self.how_many_HDs_left.set("Count Remaining: "+str(hmlRes[0]))
-        else:
-            self.how_many_HDs_left.set("Count Remaining: "+str(0))
-
-
-class Report(DonationBanner,DBI):
-    def __init__(self,parent,*args,**kwargs):
-        self.ini_section = kwargs['ini_section']
-        self.parent=parent
-        DBI.__init__(self,ini_section = kwargs['ini_section'])
-
-        queryCompletedLots = \
-        """
-        with completedlots as
-        (select avg(donors.donor_id) as donor_id, donation_id,
-        bool_and(case when destroyed = TRUE or sanitized=TRUE THEN TRUE ELSE FALSE END)
-        from processing inner join donations using (donation_id)
-        inner join donors USING (donor_id)
-        where devicehdsn is not null and reported=FALSE
-        group by donation_id
-        having bool_and(case when destroyed = TRUE or sanitized=TRUE THEN TRUE ELSE FALSE END) = TRUE)
-
-        select donors.name, donations.lotnumber
-        from completedlots
-        inner join donors on completedlots.donor_id = donors.donor_id
-        inner join donations on completedlots.donation_id=donations.donation_id
-        order by lotnumber;
-        """
-        tk.Label(parent,text='Completed Lots:').pack()
-        completedLots = self.fetchall(queryCompletedLots)
-        clots =list()
-        for lot in completedLots:
-            lotdesc = str()
-            for lotDescriptor in lot:
-                lotdesc+=str(lotDescriptor)
-                if lotDescriptor !=lot[-1]:
-                    lotdesc += ' | '
-            clots.append(lotdesc)
-
-        self.lotvar = tk.StringVar(parent,value="donor name | lotnumber")
-        self.clotsDD = tk.OptionMenu(parent,self.lotvar,"donor name | lotnumber",*clots)
-        self.clotsDD.pack()
-
-        queryPartiallyCompletedLots = \
-        """
-        with PartiallyCompletedLots as (select donation_id, count(devicehdsn) as howmanyleft
-        from processing
-        inner join donations USING (donation_id)
-        where destroyed=FALSE and sanitized=FALSE and reported=FALSE
-        group by donation_id
-        having count(devicehdsn) < %s
-        and count(devicehdsn)>0)
-
-        select donors.name,lotnumber, howmanyleft
-        from PartiallyCompletedLots
-        inner join donations using (donation_id)
-        inner join donors using (donor_id)
-        order by lotnumber;
-        """
-        tk.Label(parent,text='Partially Completed Lots with Maximum Number left: ').pack()
-        self.maximum = tk.StringVar(parent,value='15')
-        maxEntry=tk.Entry(parent,width=5,textvariable=self.maximum)
-        maxEntry.pack()
-        partialLots = self.fetchall(queryPartiallyCompletedLots % (self.maximum.get(),))
-        pclots =list()
-        for lot in partialLots:
-            lotdesc = str()
-            for lotDescriptor in lot:
-                lotdesc+=str(lotDescriptor)
-                if lotDescriptor !=lot[-1]:
-                    lotdesc += ' | '
-            pclots.append(lotdesc)
-
-        self.plotvar = tk.StringVar(parent,value="donor name | lotnumber | how many left")
-        self.pclotsDD = tk.OptionMenu(parent,self.plotvar,"donor name | lotnumber | how many left",*pclots)
-        self.pclotsDD.pack()
-
-        DonationBanner.__init__(self,parent,ini_section=kwargs['ini_section'])
-        self.lookIntoLot = tk.Button(parent,
-            text='Look into selected lot',
-            width = 15,
-            height = 2,
-            bg = "blue",
-            fg = "yellow",
-        )
-        self.lookIntoLot.bind('<Button-1>',self.lookIntoLots)
-        self.lookIntoLot.pack()
-        self.genReport = tk.Button(parent,
-            text='Get Receipts',
-            width = 15,
-            height = 2,
-            bg = "blue",
-            fg = "yellow",
-        )
-        self.genReport.bind('<Button-1>',self.getTextFiles)
-        self.genReport.pack()
-
-        self.devicesTuple = tuple()
-        self.err = tk.StringVar()
-        tk.Label(parent,textvariable=self.err).pack()
-    def getTextFiles(self,event):
-        self.donationID=self.donationIDVar.get()
-        if len(self.donationID) == 0:
-            self.err.set('Please select a donation.')
-            return self
-        self.donationID=self.donationIDVar.get()
-        self.donationInfo=self.fetchone(sql.Report.donationInfo,self.donationID)
-        devices = self.devicesToTuple()
-        qcdevices=self.qcDevicesToTuple()
-        devicesFilePath=self.TupleToTabDelimitedReport('',devices)
-        qcFilePath=self.TupleToTabDelimitedReport('QC',qcdevices)
-        procs = []
-        for outfile in [devicesFilePath,qcFilePath]:
-            proc = Process(target=os.system,args=('notepad {}'.format(outfile),))
-            procs.append(proc)
-            proc.start()
-        for proc in procs:
-            proc.join()
-        self.err.set('Files successfully saved in your Downloads folder.')
-        return self
-    def devicesToTuple(self):
-        deviceInfo = \
-        """
-        SELECT dts.deviceType, p.deviceSN, COALESCE(p.devicehdsn,''),
-            p.assetTag, p.destroyed, p.sanitized, s.nameabbrev,
-            CASE WHEN p.deviceHDSN is NULL THEN TO_CHAR(p.entryDate,'MM/DD/YYYY HH24:MI')
-            ELSE TO_CHAR(p.wipeDate,'MM/DD/YYYY HH24:MI')
-            END AS date
-        FROM processing p
-        INNER JOIN deviceTypes dts on dts.type_id = p.deviceType_id
-        INNER JOIN staff s on s.staff_id = p.staff_id
-        WHERE p.donation_id = %s
-        ORDER BY p.entryDate;
-        """
-        print(deviceInfo % (self.donationID,))
-        devices = self.fetchall(deviceInfo,self.donationID)
-        cols = 'Drive	Item Type	Item Serial	HD Serial Number	Asset Tag	Destroyed	Data Sanitized	Staff	Entry Date'
-        devices.insert(0,tuple(cols.split('\t')))
-        for driveNum in range(1,len(devices)):
-            devices[driveNum] = (driveNum,) + devices[driveNum]
-        return tuple(devices)
-    def qcDevicesToTuple(self):
-        devices = self.fetchall(sql.Report.qcInfo,self.donationID)
-        cols = 'Sample	HD Serial Number	Date Reviewed	Staff'
-        devices.insert(0,tuple(cols.split('\t')))
-        for driveNum in range(1,len(devices)):
-            devices[driveNum] = (driveNum,) + devices[driveNum]
-        return tuple(devices)
-    def removeDuplicates(self):
-        self.cur.execute(sql.tidyup.cutdown % (self.donationIDVar.get(),))
-        self.conn.commit()
-        return self
-    def TupleToTabDelimitedReport(self,appendage,devicesTuple):
-        downloadsFolder = join(Path.home(),'Downloads')
-        fileName = '%s - %s - %s.txt' % (self.donationInfo[2],self.donationInfo[0],str(appendage))
-        filepath = join(downloadsFolder,fileName)
-        outfile = open(filepath,"w")
-        for row in devicesTuple:
-            for col in row:
-                outfile.write(str(col) + '\t')
-            outfile.write('\n')
-        outfile.close()
-        return filepath
-    def lookIntoLots(self,event):
-        pop_up = tk.Toplevel(self.parent)
-        pop_up.title('Lots info')
-        InvestigateLots(pop_up,ini_section=self.ini_section,donationID=self.donationIDVar)
 
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Drive register Station")
-    app = ProcessedHardDrives(root,ini_section='local_appendage')
+    app = ProcessedHardDrives(root,ini_section='appendage')
     app.mainloop()
