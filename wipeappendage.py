@@ -88,7 +88,9 @@ class ProcessedHardDrives(tk.Frame,DBI):
         self.getHdsnInfobutton.pack()
         tk.Label(parent,textvariable=self.hdpidLog).pack()
         tk.Label(parent,textvariable=self.hdLog).pack()
-        self.updatehdsnbutton.pack()
+        #the following is dangerous. Its probably fine... but manually
+        #logging into database and doing the update would be better.
+        #self.updatehdsnbutton.pack()
     def getHdsnInfo(self,event):
         pop_up = tk.Toplevel(self.parent)
         kwargs = dict()
@@ -103,18 +105,22 @@ class ProcessedHardDrives(tk.Frame,DBI):
         updatehdSQL = \
         """
         UPDATE harddrives
-            set devicehdsn = %s
+            set hdsn = %s
             WHERE {}
             RETURNING device_id;
         """
         if self.hdpid.index("end") != 0:
             rowIdentifier = 'hdpid = %s' % (self.hdpid.get(),)
-        else:
+        elif len(self.hdpidVal.get()) !=0:
             rowIdentifier = 'hdpid = %s' % (self.hdpidVal.get(),)
+        else:
+            self.err.set('include a Hard Drive PID in order to update SN.')
+            return self
         updatehdSQL.format(rowIdentifier)
         self.fetchone(updatehdSQL,self.hd.get())
         self.hd.delete(0,'end')
         self.hdpid.delete(0,'end')
+        return self
     def finishHD(self,event):
         name = self.staffName.get()
         if name == "staff:":
@@ -128,7 +134,7 @@ class ProcessedHardDrives(tk.Frame,DBI):
             wipeDate = %s,
             staff_id = (Select staff_id from staff s where s.name = %s)
         WHERE {}
-        RETURNING hd_id,hdsn
+        RETURNING hd_id,hdsn,hdpid
         )
         UPDATE donations
         SET numwiped = (CASE WHEN numwiped is not null THEN (numwiped + 1) ELSE 0 END)
@@ -137,7 +143,7 @@ class ProcessedHardDrives(tk.Frame,DBI):
                             FROM processing
                             WHERE hd_id = (SELECT hd_id FROM logHdStatus)
                             )
-        RETURNING numwiped,(select hdsn from logHdStatus),(select hd_id from logHdStatus),donation_id;
+        RETURNING numwiped,(select hdsn from logHdStatus),(select hd_id from logHdStatus),donation_id,(select hdpid from logHdStatus);
         """
         wiped = self.wiperProduct.get()
         if wiped == "Wiped.":
@@ -146,24 +152,27 @@ class ProcessedHardDrives(tk.Frame,DBI):
             wipedOrDestroyed="sanitized = FALSE, destroyed = TRUE"
         if self.hdpid.index("end") != 0:
             hardDriveIdentifier = "hdpid = LOWER('%s')" % (self.hdpid.get(),)
+            usedpid = True
         else:
-            hardDriveIdentifier = "devicehdsn = LOWER('%s')" % (self.hd.get(),)
-        hdStatusUpdate = hdStatusUpdate.format(wipedOrDestroyed,hardDriveIdentifier)
+            hardDriveIdentifier = "hdsn = LOWER('%s')" % (self.hd.get(),)
+            usedpid = False
+        hdStatusUpdate_FleshedOut = hdStatusUpdate.format(wipedOrDestroyed,hardDriveIdentifier)
         try:
             now = datetime.datetime.now()
-            out = self.fetchone(hdStatusUpdate,now,name)
+            out = self.fetchone(hdStatusUpdate_FleshedOut,now,name)
             self.conn.commit()
-            if len(out) == 0:
+            if out==None:
                 self.err.set('Error! Error! provided '+ hardDriveIdentifier +' isn\'t in system!')
                 pop_up = tk.Toplevel(self.parent)
                 pop_up.title('Deeper Hard Drive Search')
+                hdStatusUpdate_ForPassThru = hdStatusUpdate.format(wipedOrDestroyed,'{}')
                 deeperHardDriveSearch(pop_up,ini_section=self.ini_section,
-                                     hdserial=hd,name=name,wipedVar=wiped,sqlupdate=finalizeHDStatus)
+                                     hdserial=self.hd,name=name,wipedVar=wiped,
+                                     sqlupdate=hdStatusUpdate_ForPassThru)
             else:
-                print(out)
                 if out[0] == 0:
                     self.err.set('First HD for Lot. Please do Quality Check.')
-                    self.qualityCheck(name,out[1],wiped,hd_id=out[2],donation_id=out[3])
+                    self.qualityCheck(name,out[1],wiped,hd_id=out[2],donation_id=out[3],hdpid=out[4])
                 else:
                     self.err.set('success! Its been {} drives sence QC'.format(out[0]-1))
                 self.hdpidVal = self.hdpid.get()
@@ -181,31 +190,38 @@ class ProcessedHardDrives(tk.Frame,DBI):
         pop_up.title('Generate CRM Report')
         Report(pop_up,ini_section=self.ini_section)
     def manualQC(self,event):
-        self.qualityCheck(self.staffName.get(),self.hd.get(),self.wiperProduct.get())
-    def qualityCheck(self,name,hd,status,**kwargs):
+        if self.hdpid.index("end") != 0 and self.hd.index("end") != 0:
+            self.qualityCheck(self.staffName.get(),self.wiperProduct.get(),
+                hd=self.hd.get(),hdpid=self.hdpid.get())
+        elif self.hdpid.index("end") != 0:
+            self.qualityCheck(self.staffName.get(),self.wiperProduct.get(),
+                hdpid=self.hdpid.get())
+        elif self.hd.index("end") != 0:
+            self.qualityCheck(self.staffName.get(),self.wiperProduct.get(),
+                hd=self.hd.get())
+        else:
+            self.err.set('Please provide HD PID or SN.')
+    def qualityCheck(self,name,status,**kwargs):
         pop_up = tk.Toplevel(self.parent)
         pop_up.title('Quality Check')
-        if 'donation_id' in kwargs:
-            qc(pop_up,name=name,hdserial=hd,status=status,
-                ini_section=self.ini_section,
-                donation_id = kwargs['donation_id'],
-                hd_id = kwargs['hd_id'])
-        else:
-            qc(pop_up,name=name,hdserial=hd,status=status,
-                ini_section=self.ini_section,
-                hd_id=kwargs['hd_id'])
+        qc(pop_up,name=name,status=status,ini_section=self.ini_section,**kwargs)
 class deeperHardDriveSearch(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent,*args)
         self.parent=parent
-        DBI.__init__(self,ini_section = kwargs['ini_section'])
+        self.ini_section = kwargs['ini_section']
+        DBI.__init__(self,ini_section = self.ini_section)
         self.sqlUpdateStatement=kwargs['sqlupdate']
         self.username = kwargs['name']
         self.hd=tk.StringVar(parent)
-        self.hd.set(kwargs['hdserial'])
+        self.parentHD = kwargs['hdserial']
+        if self.parentHD.index("end") != 0:
+            self.hd.set(self.parentHD.get())
+            hds = self.fetchall(self.getQuery(self.hd.get()),self.hd.get())
+            hds =[hd[0] for hd in hds]
+        else:
+            hds = list()
         self.stringEntry = tk.Entry(parent,width=20,textvariable=self.hd)
-        hds = self.fetchall(self.getQuery(self.hd.get()),self.hd.get())
-        hds =[hd[0] for hd in hds]
         self.hdvar = tk.StringVar(parent,value="select a hd:")
         self.hdDD = tk.OptionMenu(parent,self.hdvar,"select a hd:",*hds)
         self.searchButton = tk.Button(parent,
@@ -219,15 +235,24 @@ class deeperHardDriveSearch(tk.Frame,DBI):
         self.stringEntry.pack()
         self.searchButton.pack()
         self.hdDD.pack()
-        self.updateButton = tk.Button(parent,
-            text='commit it',
+        tk.Label(parent,text=kwargs['wipedVar']).pack()
+        self.pbButton = tk.Button(parent,
+            text='pass back selected HD SN',
             width = 25,
             height = 2,
             bg = "blue",
             fg = "yellow",
         )
-        tk.Label(parent,text=kwargs['wipedVar']).pack()
-        self.updateButton.bind('<Button-1>',self.runUpdate)
+        self.pbButton.bind('<Button-1>',self.passBack)
+        self.pbButton.pack()
+        self.updateButton = tk.Button(parent,
+            text='Update HD SN',
+            width = 25,
+            height = 2,
+            bg = "blue",
+            fg = "yellow",
+        )
+        self.updateButton.bind('<Button-1>',self.updateSN)
         self.updateButton.pack()
         # self.tv = tk.ttk.Treeview(self,columns=(1,),show='headings',height=8)
         # self.tv.heading(1,text='HDSN')
@@ -243,8 +268,8 @@ class deeperHardDriveSearch(tk.Frame,DBI):
     def getQuery(self,hd):
         if len(hd) < 6:
             return """
-            with userinput as (SELECT %s as value)
-            SELECT devicehdsn
+            with userinput as (SELECT LOWER(%s) as value)
+            SELECT hdsn
             FROM harddrives
             WHERE destroyed = FALSE
             AND sanitized = FALSE
@@ -256,7 +281,7 @@ class deeperHardDriveSearch(tk.Frame,DBI):
             """
         else:
             return """
-            with userinput as (SELECT %s as value)
+            with userinput as (SELECT LOWER(%s) as value)
             SELECT hdsn
             FROM harddrives
             WHERE destroyed = FALSE
@@ -268,7 +293,6 @@ class deeperHardDriveSearch(tk.Frame,DBI):
             LIMIT 10;
             """
     def search(self,event):
-        print('here2')
         hds =self.fetchall(self.getQuery(self.hd.get()),self.hd.get())
         self.hdDD['menu'].delete(0,'end')
         filtered_hds = self.fetchall(self.getQuery(self.hd.get()),self.hd.get())
@@ -276,13 +300,61 @@ class deeperHardDriveSearch(tk.Frame,DBI):
             self.hdDD['menu'].add_command(label=hd[0],
                 command=tk._setit(self.hdvar,hd[0]))
         return self
-    def runUpdate(self,event):
+    def passBack(self,event):
         hd = self.hdvar.get()
         if hd == "select a hd:":
             self.err.set('please select a value from drop down.')
         else:
-            now = datetime.datetime.now()
-            self.fetchall(self.sqlUpdateStatement,(now,self.username,hd))
+            self.parentHD.delete(0,'end')
+            self.parentHD.insert(0,hd)
+            self.parent.destroy()
+            #now = datetime.datetime.now()
+            #sqlUpdateStatement=self.sqlUpdateStatement.format("hdsn = LOWER('%s')" % (hd,))
+            #self.fetchone(sqlUpdateStatement,(now,self.username))
+            #self.conn.commit()
+    def updateSN(self,event):
+        hdBanked = self.hdvar.get()
+        if hdBanked == "select a hd:":
+            self.err.set('please select a value from drop down.')
+        else:
+            pop_up = tk.TopLevel(self.parent)
+            UpdateHD(pop_up,ini_section=self.ini_section,hdBanked=hdBanked)
+class UpdateHD(tk.Frame,DBI):
+    def __init__(self,parent,*args,**kwargs):
+        tk.Frame.__init__(self,parent,*args)
+        self.parent=parent
+        DBI.__init__(self,ini_section = kwargs['ini_section'])
+        self.hdBanked = kwargs['hdBanked']
+        tk.Label(parent,text='Update HD SN: ' + self.hdBanked + ' \nwith:').pack()
+        self.newHD = tk.Entry(parent,width=20)
+        self.newHD.pack()
+        self.err = tk.StringVar(parent)
+        tk.Label(parent,textvariable=self.err).pack()
+        updateButton = tk.Button(parent,
+            text='Update HD SN',
+            width = 25,
+            height = 2,
+            bg = "blue",
+            fg = "yellow",
+        )
+        updateButton.bind('<Button-1>',self.updateHD)
+        updateButton.pack()
+
+    def updateHD(self,event):
+        try:
+            updateSQL = \
+            """
+            UPDATE harddrives
+            SET hdsn = %s
+            WHERE hdsn = %s;
+            """
+            out=self.insertToDB(updateSQL,self.newHD.get(),self.hdBanked)
+            self.err.set(out)
+        except (Exception, psycopg2.DatabaseError) as error:
+            self.err.set(error)
+        finally:
+            return self
+
 
 class HdFacts(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
@@ -320,10 +392,12 @@ class HdFacts(tk.Frame,DBI):
         if 'hdpid' in kwargs:
             rowIdentifier="hdpid = LOWER('%s')" % (kwargs['hdpid'],)
             self.hdpid.insert(0,kwargs['hdpid'])
+            self.hdpidLog = kwargs['hdpid']
         else:
             rowIdentifier="hdsn = LOWER('%s')" % (kwargs['hdsn'],)
-            self.hdsn.insert(0,kwargs['hdsn'])
+            self.devicehdsn.insert(0,kwargs['hdsn'])
         hdInfo=self.fetchone(self.SqlGetHdInfo.format(rowIdentifier))
+        print('here')
         self.updateFrame(hdInfo)
         hdpidL.pack()
         self.hdpid.pack()
@@ -350,7 +424,7 @@ class HdFacts(tk.Frame,DBI):
         if self.hdpid.get() != self.hdpidLog:
             rowIdentifier='hdpid = %s' % (self.hdpid.get(),)
         elif self.devicehdsn.get() != self.hdsnLog:
-            rowIdentifier='devicehdsn = %s' % (self.devicehdsn.get(),)
+            rowIdentifier='hdsn = %s' % (self.devicehdsn.get(),)
         else:
             self.err.set('please enter a new HD PID or HD SN.')
             return self
@@ -366,12 +440,12 @@ class HdFacts(tk.Frame,DBI):
             self.lotNumber.set('lotnumber: '+str(hdInfo[0]))
             self.donorName.set('donorName: '+str(hdInfo[1]))
             self.name.set('Wiper name: '+str(hdInfo[2]))
-            self.entryDate.set('entryDate: '+str(hdInfo[3]))
-            self.wipedate.set('wipedate: '+str(hdInfo[4]))
+            self.entryDate.set('entryDate: '+str(hdInfo[3])[:20])
+            self.wipeDate.set('wipedate: '+str(hdInfo[4])[:20])
             self.devicesn.set('devicesn: '+str(hdInfo[5]))
 
             self.devicehdsn.delete(0,'end')
-            self.devicehdpid.delete(0,'end')
+            self.hdpid.delete(0,'end')
             self.devicehdsn.insert(0,str(hdInfo[6]))
             self.hdpid.insert(0,str(hdInfo[7]))
             self.hdsnLog = self.devicehdsn.get()
@@ -384,35 +458,81 @@ class HdFacts(tk.Frame,DBI):
 class qc(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent,*args)
-        self.hd = kwargs['hdserial']
-        if "hd_id" in kwargs:
-            self.hd_id = kwargs['hd_id']
-        else:
-            hd_idSQL = \
+        DBI.__init__(self,ini_section = kwargs['ini_section'])
+        if "hd" in kwargs and "hdpid" in kwargs:
+            self.hd = kwargs['hd']
+            self.hdpid = kwargs['hdpid']
+        elif "hdpid" in kwargs:
+            self.hdpid = kwargs['hdpid']
+            hdSQL = \
             """
-            SELECT hd_id
+            SELECT hdsn
+            FROM harddrives
+            WHERE hdpid = LOWER(%s);
+            """
+            res = self.fetchone(hdSQL,self.hdpid)
+            if res != None:
+                self.hd = res[0]
+            else:
+                self.hd = None
+        else:
+            self.hd = kwargs['hd']
+            hdpidSQL = \
+            """
+            SELECT hdpid
             FROM harddrives
             WHERE hdsn = LOWER(%s);
             """
-            self.hd_id = self.fetchone(hd_idSQL,self.hd)[0]
+            res = self.fetchone(hdpidSQL,self.hd)
+            if res != None:
+                self.hdpid = res[0]
+            else:
+                self.hdpid = None
         self.hdstatus=kwargs['status']
-        DBI.__init__(self,ini_section = kwargs['ini_section'])
         if 'donation_id' in kwargs:
             self.donation_id = kwargs['donation_id']
         else:
-            donationIDFromHDSN= \
+            donationIDFromHDinfo= \
             """
             SELECT donation_id
             FROM processing
             INNER JOIN harddrives hd USING (hd_id)
-            WHERE hd.hdsn = lower(%s);
+            WHERE {};
             """
-            self.donation_id = self.fetchone(donationIDFromHDSN,self.hd)[0]
-        stafflist = self.fetchall(sql.DeviceInfo.getStaffqc,kwargs['name'])
+            if self.hdpid is not None:
+                donationIDFromHDPID = donationIDFromHDinfo.format("hd.hdpid = LOWER(%s)")
+                self.donation_id = self.fetchone(donationIDFromHDPID,self.hdpid)[0]
+            else:
+                donationIDFromHDSN = donationIDFromHDinfo.format("hd.hdsn = LOWER(%s)")
+                self.donation_id = self.fetchone(donationIDFromHDSN,self.hd)[0]
+        if 'hd_id' in kwargs:
+            self.hd_id = kwargs['hd_id']
+        else:
+            get_hd_id = \
+            """
+            SELECT hd_id
+            FROM harddrives hd
+            WHERE {};
+            """
+            if self.hdpid is not None:
+                hd_id_fromHDPID = get_hd_id.format("hd.hdpid = LOWER(%s)")
+                self.hd_id = self.fetchone(hd_id_fromHDPID,self.hdpid)[0]
+            else:
+                hd_id_fromHDSN = get_hd_id.format("hd.hdsn = LOWER(%s)")
+                self.hd_id = self.fetchone(hd_id_fromHDSN,self.hd)[0]
+        getStaffqc = \
+        """
+        SELECT name
+        FROM staff
+        WHERE name != %s
+        AND active=TRUE;
+        """
+        stafflist = self.fetchall(getStaffqc,kwargs['name'])
         snames =[staff[0] for staff in stafflist]
         self.staffName = tk.StringVar(parent,value="staff:")
         self.staffDD = tk.OptionMenu(parent,self.staffName,"staff:",*snames)
         instructions=tk.Label(parent,text='please get another staff member to perform quality check\nfor hard drive:').pack()
+        hdidlabel = tk.Label(parent,text =self.hdpid).pack()
         hdlabel = tk.Label(parent,text =self.hd).pack()
         self.wiperProduct = tk.Label(parent,text="HD is " + kwargs['status']).pack()
         self.staffDD.pack()

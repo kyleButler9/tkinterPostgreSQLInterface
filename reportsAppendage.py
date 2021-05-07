@@ -37,9 +37,9 @@ class InvestigateLots(DonationBanner,DBI):
             return self
         getInfo = \
         """
-        SELECT count(DISTINCT hd_id),count(DISTINCT devicesn)
-        FROM processing
-        WHERE donation_id = %s;
+        SELECT count(DISTINCT hd.hd_id),count(DISTINCT p.devicesn)
+        FROM processing p INNER JOIN harddrives hd using (hd_id)
+        WHERE p.donation_id = %s;
         """ % (donationID)
         res = self.fetchone(getInfo)
         msg=dict()
@@ -214,12 +214,12 @@ class Report(DonationBanner,DBI):
         devicesFilePath=self.TupleToTabDelimitedReport('',devices)
         qcFilePath=self.TupleToTabDelimitedReport('QC',qcdevices)
         procs = []
-        for outfile in [devicesFilePath,qcFilePath]:
-            proc = Process(target=os.system,args=('notepad {}'.format(outfile),))
-            procs.append(proc)
-            proc.start()
-        for proc in procs:
-            proc.join()
+        # for outfile in [devicesFilePath,qcFilePath]:
+        #     proc = Process(target=os.system,args=('notepad {}'.format(outfile),))
+        #     procs.append(proc)
+        #     proc.start()
+        # for proc in procs:
+        #     proc.join()
         self.err.set('Files successfully saved in your Downloads folder.')
         return self
     def devicesToTuple(self):

@@ -505,6 +505,31 @@ class InsertDrives(tk.Frame,DBI):
                             str(pid),str(donationID),datetime.datetime.now()]
                     insertDevice = \
                     """
+                    with devInfo as (
+                        INSERT INTO processing(deviceType_id,
+                            deviceSN,
+                            assetTag,
+                            staff_id,
+                            pid,
+                            donation_id,
+                            entryDate)
+                        VALUES((SELECT dt.type_id
+                                    FROM deviceTypes dt
+                                    WHERE dt.deviceType = %s),
+                                TRIM(LOWER(%s)),TRIM(LOWER(%s)),
+                                (SELECT s.staff_id
+                                        FROM staff s
+                                        WHERE s.name =%s),
+                                TRIM(LOWER(%s)),%s,%s)
+                        RETURNING device_id
+                    )
+                    INSERT INTO harddrives(hdpid,hdsn,device_id)
+                    VALUES(TRIM(LOWER(%s)),TRIM(LOWER(%s)),
+                        (SELECT device_id from devInfo))
+                    RETURNING hd_id,device_id;
+                    """
+                    insertDevice = \
+                    """
                     WITH hdinfo as (
                     INSERT INTO harddrives(hdpid,hdsn)
                     VALUES(TRIM(LOWER(%s)),TRIM(LOWER(%s)))
@@ -559,7 +584,7 @@ class InsertDrives(tk.Frame,DBI):
                             (select hd_id from hdinfo));
                     """
                     out = self.insertToDB(insertDevice,*args)
-                else:
+                elif len(str(dSerial)) > 0 or len(str(pid)) > 0:
                     args =[str(type),str(dSerial),str(assetTag),str(staff),
                             str(pid),str(donationID),datetime.datetime.now()]
                     insertDeviceNoHD = \
@@ -581,6 +606,8 @@ class InsertDrives(tk.Frame,DBI):
                             TRIM(LOWER(%s)),%s,%s);
                     """
                     out = self.insertToDB(insertDeviceNoHD,*args)
+                else:
+                    self.successVar.set('please include some info to insert to DB.')
                 if quality != "quality:":
                     updateDeviceQuality = \
                     """
