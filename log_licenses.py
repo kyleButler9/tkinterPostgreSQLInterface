@@ -19,18 +19,15 @@ class PK_Entries(tk.Frame):
         self.microsoftPK3 = tk.Entry(self,fg='black',bg='white',width=6,textvariable=self.PKEntry3)
         self.microsoftPK4 = tk.Entry(self,fg='black',bg='white',width=6,textvariable=self.PKEntry4)
         self.microsoftPK5 = tk.Entry(self,fg='black',bg='white',width=6,textvariable=self.PKEntry5)
-        #self.microsoftPK6 = tk.Entry(self,fg='black',bg='white',width=6)
         self.PKEntry1.trace("w", lambda *args: self.microsoftPK2.focus() if len(self.PKEntry1.get())==5 else False)
         self.PKEntry2.trace("w", lambda *args: self.microsoftPK3.focus() if len(self.PKEntry2.get())==5 else False)
         self.PKEntry3.trace("w", lambda *args: self.microsoftPK4.focus() if len(self.PKEntry3.get())==5 else False)
         self.PKEntry4.trace("w", lambda *args: self.microsoftPK5.focus() if len(self.PKEntry4.get())==5 else False)
-        #self.PKEntry5.trace("w", lambda *args: self.microsoftPK6.focus() if len(self.PKEntry5.get())==5 else False)
         self.microsoftPK1.pack(side=LEFT)
         self.microsoftPK2.pack(side=LEFT)
         self.microsoftPK3.pack(side=LEFT)
         self.microsoftPK4.pack(side=LEFT)
         self.microsoftPK5.pack(side=LEFT)
-        #self.microsoftPK6.pack(side=LEFT)
 
 class SNPK(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
@@ -82,15 +79,6 @@ class SNPK(tk.Frame,DBI):
         )
         self.retrieveLast.bind('<Button-1>',self.retrieve_last_entry)
         self.retrieveLast.pack()
-        # self.update_PKB = tk.Button(parent,
-        #     text='Update PK Via SN',
-        #     width = 15,
-        #     height = 2,
-        #     bg = "blue",
-        #     fg = "yellow",
-        # )
-        # self.update_PKB.bind('<Button-1>',self.update_PK)
-        # self.update_PKB.pack()
         self.last_entry_update=False
 
     def insertSNPK(self,event):
@@ -155,50 +143,12 @@ class SNPK(tk.Frame,DBI):
             if getattr(self.PK,'microsoftPK'+str(i)).index('end') !=0:
                 getattr(self.PK,'microsoftPK'+str(i)).delete(0,'end')
 
-    # def update_PK(self,event):
-    #     staff = self.staffName.get()
-    #     if staff == "staff:":
-    #         self.err.set('please select staff member')
-    #         return self
-    #     pk = str().join([getattr(self.PK,'microsoftPK'+str(i)).get() for i in range(1,NUM_PK_SECTIONS+1)])
-    #     last_pk = str('-').join([getattr(self.PK,'microsoftPK'+str(i)).get() for i in range(1,NUM_PK_SECTIONS+1)])
-    #     sn=self.serialNumber.get()
-    #     sql = \
-    #     """
-    #     UPDATE licenses
-    #     SET productKey=TRIM(LOWER(%s)),
-    #         staff_id = (select staff_id from staff where staff.name=%s)
-    #     WHERE serialnumber = TRIM(LOWER(%s));
-    #     """
-    #     try:
-    #         out = self.insertToDB(sql,pk,staff,sn)
-    #         self.err.set(out)
-    #         self._clear_form()
-    #     except (Exception, psycopg2.DatabaseError) as error:
-    #         self.err.set(error)
-    #     finally:
-    #         return self
-
 class UpdateVsSubmission(tk.Frame):
     #this object is the checker of the incorrect submit click. will pop up when submit is clicked after a form repopulation
     def __init__(self,parent,*args,**kwargs):
-        self.parent=parent
         tk.Frame.__init__(self,parent)
         tk.Label(parent,text='It appears you repopulated the form with the last submission').pack()
-        tk.Label(parent,text='Are you sure you want to update the PK instead of submitting a new SN with that PK?').pack()
-        self.submitB = tk.Button(parent,
-            text='Continue',
-            width = 15,
-            height = 2,
-            bg = "blue",
-            fg = "yellow"
-        )
-        self.submitB.bind('<Button-1>',self.submit_)
-        self.submitB.pack()
-    def submit_(self,event):
-        self.parent.destroy()
-
-
+        tk.Label(parent,text='Note that I proceeded to update the PK if the SN was the same as a previous submission').pack()
 
 if __name__ == "__main__":
     root = tk.Tk()

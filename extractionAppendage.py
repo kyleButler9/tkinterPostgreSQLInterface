@@ -185,35 +185,35 @@ class InsertDrives(tk.Frame,DBI):
             print(type(arg),arg)
         submitted_headers= Header_Vals(args[0],args[6],args[7],args[8])
         submitted_form=Entry_Vals(args[2],args[3],args[4],args[5],args[1])
-
         insertDevice = \
         """
-        DROP TABLE IF EXISTS user_inputs
+        DROP TABLE IF EXISTS user_inputs;
         CREATE TEMP TABLE user_inputs(
-            devicetype VARCHAR(20),
-            device_sn VARCHAR(20),
-            device_hdsn VARCHAR(20),
-            pid VARCHAR(20),
-            hdpid VARCHAR(20),
-            assettag VARCHAR(255),
-            quality VARCHAR(20),
+            devicetype_id integer,
+            pc_sn VARCHAR(20),
+            hd_sn VARCHAR(20),
+            pc_id VARCHAR(20),
+            hd_id VARCHAR(20),
+            asset_tag VARCHAR(255),
+            quality_id integer,
             staff_id integer,
-            entrydate timestamp,
+            intake_date timestamp,
             donation_id integer,
-            p_id INTEGER,
-            hd_id INTEGER
-            )
+            pc_table_id INTEGER,
+            hd_table_id INTEGER
+            );
         INSERT INTO user_inputs(
             donation_id,
-            assettag,
-            pid,
-            device_sn,
-            hdpid,
-            device_hdsn,
+            asset_tag,
+            pc_id,
+            pc_sn,
+            hd_id,
+            hd_sn,
             staff_id,
             devicetype_id,
             quality_id,
-            entrydate)
+            intake_date
+	)
         VALUES (
             %s,
             %s,
@@ -226,15 +226,31 @@ class InsertDrives(tk.Frame,DBI):
             (SELECT quality_id from qualities where quality = %s),
             NOW()
         );
-        with device_info as ({}), harddrive_info as ({})
+        with device_info as (
+            INSERT INTO computers(pid,sn,type_id,quality_id)
+                SELECT pc_id,pc_sn,devicetype_id, quality_id
+                    FROM user_inputs
+            ON CONFLICT (pid) DO UPDATE
+                SET quality_id = EXCLUDED.quality_id,
+                    type_id = EXCLUDED.type_id
+            RETURNING p_id as pc_table_id
+            ), harddrive_info as (
+            INSERT INTO harddrives(hdpid,hdsn)
+                SELECT hd_id,hd_sn
+                    FROM user_inputs
+            ON CONFLICT (hdpid) DO UPDATE
+                SET hdsn = harddrives.hdsn
+            RETURNING hd_id as hd_table_id
+            )
         UPDATE user_inputs
-            SET p_id = (select pid from device_info),
-                hd_id = (select hd_id from harddrive_info)
-        INSERT INTO donatedgoods(donation_id,p_id,hd_id,intakedate,assettag)
-            SELECT donation_id,p_id,hd_id,intakedate,assettag
+            SET pc_table_id = (select pc_table_id from device_info),
+                hd_table_id = (select hd_table_id from harddrive_info);
+        INSERT INTO donatedgoods(donation_id,p_id,hd_id,intakedate,assettag,staff_id)
+            SELECT donation_id,pc_table_id,hd_table_id,intake_date,asset_tag,staff_id
             FROM user_inputs
-        RETURNING id, hd_id,device_id;
-            """ #note that I'm leaving blank from the update the SN so that we can just scan the pid to add an additional HD
+        RETURNING id, p_id,hd_id,donation_id;
+        """
+            #note that I'm leaving blank from the update the SN so that we can just scan the pid to add an additional HD
             #also note that when there is a harddrive conflict
             #the hdsn isnt updated
         if submitted_form.pc_id is not None:
@@ -270,8 +286,8 @@ class InsertDrives(tk.Frame,DBI):
             hd_insert = "SELECT NULL as hd_id"
         insert_device_sql = insertDevice.format(computer_insert,hd_insert)
         try:
-            print(insert_device_sql % (*args,))
             out=self.fetchone(insert_device_sql,*args)
+            self.conn.commit()
             print(out,'here')
             self.update_last_device_log(out,submitted_form)
             self.clear_form()
@@ -289,11 +305,7 @@ class InsertDrives(tk.Frame,DBI):
         return self
     def clear_form(self):
         for key in self.EV_fields:
-            getattr(self.entries,key).delete(0,'end')
-        # self.entries['pc_sn'].delete(0,'end')
-        # self.entries['hd_id'].delete(0,'end')
-        # self.entries['hd_sn'].delete(0,'end')
-        # self.entries['asset_tag'].delete(0,'end')
+            self.entries[key].delete(0,'end')
         return self
 
 class Review(InsertDrives):
@@ -320,6 +332,7 @@ class Review(InsertDrives):
         return self
     def InsertDrives(self,event):
         pass
+
 @dataclass(order=True,frozen=True)
 class Entry_Vals:
     pc_id: str = None
@@ -342,6 +355,7 @@ class Form_Entries:
         self.hd_id=tk.Entry(parent,fg='black',bg='white',width=25),
         self.hd_sn=tk.Entry(parent,fg='black',bg='white',width=25),
         self.asset_tag=tk.Entry(parent,fg='black',bg='white',width=25)
+
 class Form_Stringvars:
     def __init__(self,parent):
         self.pc_id=tk.StringVar(parent)
