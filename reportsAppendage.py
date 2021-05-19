@@ -4,7 +4,7 @@ from multiprocessing import Process
 from pathlib import Path
 import os
 from os.path import join
-from extractionAppendage import *
+from donationBanner import *
 
 
 class InvestigateLots(DonationBanner,DBI):

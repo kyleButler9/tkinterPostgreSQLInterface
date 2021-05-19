@@ -386,23 +386,41 @@ class DBAdmin:
         """
         CREATE TABLE harddrives(
             hd_id SERIAL PRIMARY KEY,
-            hdpid VARCHAR(25) UNIQUE
-            hdsn VARCHAR(100) UNIQUE,
+            hdpid VARCHAR(25) UNIQUE NOT NULL,
+            hdsn VARCHAR(100),
             destroyed Boolean,
             sanitized Boolean,
             model VARCHAR(100),
             size VARCHAR(20),
             wipedate Timestamp
         )
-        """,
+        """, #note no unique constraint on hdsn
         """
-        CREATE TABLE computers (
-            computer_id SERIAL PRIMARY KEY,
+        create table computers(
+            p_id SERIAL PRIMARY KEY,
             pid VARCHAR(20) UNIQUE,
-            category VARCHAR(20),
             quality_id INTEGER,
-            deviceType_id INTEGER,
-            deviceSN VARCHAR(100) UNIQUE,
+            type_id INTEGER not null,
+            sn varchar(100),
+            staff_id INTEGER not null,
+            intakeDate timestamp,
+            FOREIGN KEY (quality_id) REFERENCES qualities (quality_id),
+            FOREIGN KEY (type_id) REFERENCES devicetypes (type_id),
+            FOREIGN KEY (staff_id) REFERENCES staff (staff_id)
+        )
+        """, #note that there isn't a unique constraint on device sn but there is on the pid
+        """
+        create table donatedgoods(
+            id SERIAL PRIMARY KEY,
+            donation_id INTEGER NOT NULL,
+            p_id INTEGER,
+            hd_id INTEGER UNIQUE,
+            staff_id INTEGER NOT NULL,
+            intakedate timestamp NOT NULL,
+            assettag VARCHAR(255),
+            FOREIGN KEY (p_id) REFERENCES computers (p_id),
+            FOREIGN KEY (hd_id) REFERENCES harddrives (hd_id),
+            FOREIGN KEY (staff_id) REFERENCES staff (staff_id)
         )
         """,
         """
@@ -510,23 +528,25 @@ class DBAdmin:
         """,
         """
         INSERT INTO deviceTypes(deviceType)
-        VALUES('Laptop'),('Desktop');
+        VALUES('Laptop'),('Desktop'),('Loose HD');
         """,
         """
         INSERT INTO donors(name)
-        VALUES('BDEC');
+        VALUES('Individual Donor');
         """,
         """
-        INSERT INTO donations(datereceived,donor_id,lotNumber,sheetID)
+        INSERT INTO donations(datereceived,donor_id,lotNumber)
         VALUES('12/25/2020',
             (SELECT donor_id
             FROM donors
-            WHERE name = 'BDEC'),0,
-            '1FxJ7qYRYnN2CaxB08emRUtk_X4psalprlvs0fYrYe6A')
+            WHERE name = 'Individual Donor'),0)
         """,
         """
         INSERT INTO staff(name)
-        VALUES('Employee M'),('Employee R'),('Kyle Butler');
+        VALUES('Kyle Butler');
+        """,
+        """
+        ALTER TABLE donateditems add UNIQUE (p_id,hd_id)
         """,
     )
     dropTablesCommands = (

@@ -36,7 +36,7 @@ class DBI:
     def restartConnection(self,ini_section):
         if self.conn is not None:
             self.conn.close()
-        print('\nretrying connection...\n')
+        print('\nretrying connection...')
         self.connectToDB(self.ini_section)
     def insertToDB(self,sql,*args):
         try:
@@ -45,12 +45,12 @@ class DBI:
                 cur.execute(sql,(*args,))
             else:
                 cur.execute(sql)
-            self.conn.commit()
+            out=cur.fetchone()
             cur.close()
-            out="success!"
+            self.conn.commit()
         except (Exception, psycopg2.DatabaseError) as error:
             print(error)
-            print('\nretrying connection...\n')
+            print('\nretrying connection...')
             self.restartConnection(self.ini_section)
             try:
                 cur = self.conn.cursor()
@@ -58,9 +58,9 @@ class DBI:
                     cur.execute(sql,(*args,))
                 else:
                     cur.execute(sql)
-                self.conn.commit()
+                out=cur.fetchone()
                 cur.close()
-                out="success!"
+                self.conn.commit()
             except (Exception, psycopg2.DatabaseError) as error:
                 out=error
             finally:
