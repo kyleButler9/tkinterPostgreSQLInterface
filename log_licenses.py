@@ -67,12 +67,17 @@ class PK_Entries(tk.Frame):
             #y = str().join(x)
             #print(y) -> "helloworldmynameis"
             #or equivalently, y=str().join([i for i in x])
-        return str(punctuation).join([getattr(self.PK,'microsoftPK'+str(i)).get() for i in range(1,NUM_PK_SECTIONS+1)])
-    def insert(self,PK_Entries):
+        return str(punctuation).join([getattr(self,'microsoftPK'+str(i)).get() for i in range(1,self.NUM_PK_SECTIONS+1)])
+    def insert(self,PK_Entry_List):
         #set entry values in order based on a list
         #it does not clear the remaining entries if you only insert values into the first, say, three entries.
-        for i in range(1,len(PK_Entries)+1):
-            getattr(self,'microsoftPK'+str(i)).insert(0,PK_Entries[i-1])
+        if len(PK_Entry_List) > self.NUM_PK_SECTIONS:
+            print('too many entries for form. Max Limit of {}'.format(self.NUM_PK_SECTIONS))
+            maxLength=self.NUM_PK_SECTIONS
+        else:
+            maxLength=len(PK_Entry_List)
+        for i in range(1,maxLength+1):
+            getattr(self,'microsoftPK'+str(i)).insert(0,PK_Entry_List[i-1])
         return self
 
 class SNPK(tk.Frame,DBI):
@@ -211,12 +216,12 @@ class SNPK(tk.Frame,DBI):
         """
         WITH inputs as (SELECT TRIM(LOWER(%s)) as sn, TRIM(LOWER(%s)) as pk, (SELECT s.staff_id FROM staff s where s.name = %s) as s_id)
         INSERT INTO licenses(
-            serialNumber,productKey,staff_id)
+            serialNumber,productKey,staff_id,entry_time)
         VALUES(
             (SELECT sn from inputs),
             (SELECT pk from inputs),
-            (SELECT s_id from inputs)
-            )
+            (SELECT s_id from inputs),
+            NOW())
         ON CONFLICT (serialnumber) DO UPDATE
             SET productkey = (select pk from inputs),
             staff_id = (SELECT s_id from inputs)
@@ -226,7 +231,6 @@ class SNPK(tk.Frame,DBI):
         back=None
         try:
             back = self.insertToDB(insert_snpk,sn,pk,staff)
-            print(back, " license id")
             #set err to display the row effected by the insert operation above
             #or the error message
             self.err.set("success! "+ str(back))
@@ -240,7 +244,7 @@ class SNPK(tk.Frame,DBI):
             self.err.set(error)
         finally:
             if back is not None:
-                print(back,' <<- result even though later process fail.')
+                print(back,' <<- row addressed')
             else:
                 print('Database connection or SQL execution script fail.')
             return self
@@ -274,9 +278,17 @@ class UpdateVsSubmission(tk.Frame):
         tk.Frame.__init__(self,parent)
         tk.Label(parent,text='It appears you repopulated the form with the last submission').pack()
         tk.Label(parent,text='Note that I proceeded to update the PK if the SN was the same as a previous submission').pack()
-
-if __name__ == "__main__":
+def main():
+    #when you run the script, actually only this stuff below runs. Everything above was definitions. Within definitions you instantiate other things you've defined,
+    #but its all just definitions! Up until the stuff below.
+    #this first line is basic for all tkinter GUI creation. this "root" becomes "parent" in the classes defined above.
     root = tk.Tk()
+    #here we set the top banner of the app. We can also mess with the geometry, etc. of the GUI by other root.[some stuff]
     root.title("Log Licenses")
+    #here we instantiate the SNPK class (which itself instantiates the other classes and so on, so forth)
+    #ini_section is the section that has the DB info in the .ini file
     app = SNPK(root,ini_section='appendage')
+    #this just runs the GUI. And we're off!
     app.mainloop()
+if __name__ == "__main__":
+    main()
