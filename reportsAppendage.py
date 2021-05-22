@@ -37,24 +37,39 @@ class InvestigateLots(DonationBanner,DBI):
             return self
         getInfo = \
         """
-        SELECT count(DISTINCT hd.hd_id),count(DISTINCT p.devicesn)
-        FROM processing p INNER JOIN harddrives hd using (hd_id)
-        WHERE p.donation_id = %s;
+        SELECT count(DISTINCT hd_id),count(DISTINCT p_id)
+        FROM donatedgoods
+        WHERE donation_id = %s;
         """ % (donationID)
+        # getInfo = \
+        # """
+        # SELECT count(DISTINCT hd.hd_id),count(DISTINCT p.devicesn)
+        # FROM processing p INNER JOIN harddrives hd using (hd_id)
+        # WHERE p.donation_id = %s;
+        # """ % (donationID)
         res = self.fetchone(getInfo)
         msg=dict()
         self.num_HDSN.set("Hard Drive Count: " + str(res[0]))
         self.num_SN.set("Device Count: "+str(res[1]))
         queryPartiallyCompletedLot = \
         """
-        SELECT count(hd_id) as howmanyleft
-        from harddrives hd
-        inner join processing USING (hd_id)
-        inner join donations USING (donation_id)
+        SELECT count(g.hd_id) as howmanyleft
+        from donatedgoods g
+        INNER JOIN harddrives hd USING (hd_id)
         where hd.destroyed=FALSE and hd.sanitized=FALSE
         and donation_id = %s
         group by donation_id;
         """ % (donationID,)
+        # queryPartiallyCompletedLot = \
+        # """
+        # SELECT count(hd_id) as howmanyleft
+        # from harddrives hd
+        # inner join processing USING (hd_id)
+        # inner join donations USING (donation_id)
+        # where hd.destroyed=FALSE and hd.sanitized=FALSE
+        # and donation_id = %s
+        # group by donation_id;
+        # """ % (donationID,)
         hmlRes=self.fetchone(queryPartiallyCompletedLot)
         if len(hmlRes) !=0:
             self.how_many_HDs_left.set("Count Remaining: "+str(hmlRes[0]))
@@ -67,51 +82,60 @@ class Report(DonationBanner,DBI):
         self.ini_section = kwargs['ini_section']
         self.parent=parent
         DBI.__init__(self,ini_section = kwargs['ini_section'])
-
         queryCompletedLots = \
         """
         with completedlots as
-        (select avg(donors.donor_id) as donor_id, donation_id,
+        (select g.donation_id,
         bool_and(case when hd.destroyed = TRUE or hd.sanitized=TRUE THEN TRUE ELSE FALSE END)
-        from processing
-        inner join donations using (donation_id)
-        inner join donors USING (donor_id)
-        inner join harddrives hd USING (hd_id)
-        where processing.hd_id is not null and reported=FALSE
-        group by donation_id
+        from donatedgoods g
+        INNER JOIN harddrives hd USING (hd_id)
+        INNER JOIN donations d USING (donation_id)
+        where g.hd_id is not null and d.reported=FALSE
+        group by g.donation_id
         having bool_and(case when hd.destroyed = TRUE or hd.sanitized=TRUE THEN TRUE ELSE FALSE END) = TRUE)
 
         select donors.name, donations.lotnumber
         from completedlots
-        inner join donors on completedlots.donor_id = donors.donor_id
-        inner join donations on completedlots.donation_id=donations.donation_id
-        order by lotnumber;
+        INNER JOIN donations on completedlots.donation_id=donations.donation_id
+        INNER JOIN donors USING(donor_id)
+        order by lotnumber ASC;
         """
+        # queryCompletedLots = \
+        # """
+        # with completedlots as
+        # (select avg(donors.donor_id) as donor_id, donation_id,
+        # bool_and(case when hd.destroyed = TRUE or hd.sanitized=TRUE THEN TRUE ELSE FALSE END)
+        # from processing
+        # inner join donations using (donation_id)
+        # inner join donors USING (donor_id)
+        # inner join harddrives hd USING (hd_id)
+        # where processing.hd_id is not null and reported=FALSE
+        # group by donation_id
+        # having bool_and(case when hd.destroyed = TRUE or hd.sanitized=TRUE THEN TRUE ELSE FALSE END) = TRUE)
+        #
+        # select donors.name, donations.lotnumber
+        # from completedlots
+        # inner join donors on completedlots.donor_id = donors.donor_id
+        # inner join donations on completedlots.donation_id=donations.donation_id
+        # order by lotnumber;
+        # """
         tk.Label(parent,text='Completed Lots:').pack()
         completedLots = self.fetchall(queryCompletedLots)
-        clots =list()
-        for lot in completedLots:
-            lotdesc = str()
-            for lotDescriptor in lot:
-                lotdesc+=str(lotDescriptor)
-                if lotDescriptor !=lot[-1]:
-                    lotdesc += ' | '
-            clots.append(lotdesc)
+        completedLots_descriptors = [str(' | ').join(lot_info) for lot_info in completedLots]
 
         self.lotvar = tk.StringVar(parent,value="donor name | lotnumber")
-        self.clotsDD = tk.OptionMenu(parent,self.lotvar,"donor name | lotnumber",*clots)
+        self.clotsDD = tk.OptionMenu(parent,self.lotvar,"donor name | lotnumber",*completedLots_descriptors)
         self.clotsDD.pack()
-
         queryPartiallyCompletedLots = \
         """
-        with PartiallyCompletedLots as (select donation_id, count(p.hd_id) as howmanyleft
-        from processing p
-        inner join donations USING (donation_id)
+        with PartiallyCompletedLots as (select donation_id, count(g.hd_id) as howmanyleft
+        from donatedgoods g
+        inner join donations d USING (donation_id)
         inner join harddrives hd USING (hd_id)
-        where hd.destroyed=FALSE and hd.sanitized=FALSE and reported=FALSE
+        where hd.destroyed=FALSE and hd.sanitized=FALSE and d.reported=FALSE
         group by donation_id
-        having count(p.hd_id) < %s
-        and count(p.hd_id)>0)
+        having count(hd_id) < %s
+        and count(hd_id)>0)
 
         select donors.name,lotnumber, howmanyleft
         from PartiallyCompletedLots
@@ -119,22 +143,40 @@ class Report(DonationBanner,DBI):
         inner join donors using (donor_id)
         order by lotnumber;
         """
+        # queryPartiallyCompletedLots = \
+        # """
+        # with PartiallyCompletedLots as (select donation_id, count(p.hd_id) as howmanyleft
+        # from processing p
+        # inner join donations USING (donation_id)
+        # inner join harddrives hd USING (hd_id)
+        # where hd.destroyed=FALSE and hd.sanitized=FALSE and reported=FALSE
+        # group by donation_id
+        # having count(p.hd_id) < %s
+        # and count(p.hd_id)>0)
+        #
+        # select donors.name,lotnumber, howmanyleft
+        # from PartiallyCompletedLots
+        # inner join donations using (donation_id)
+        # inner join donors using (donor_id)
+        # order by lotnumber;
+        # """
         tk.Label(parent,text='Partially Completed Lots with Maximum Number left: ').pack()
         self.maximum = tk.StringVar(parent,value='15')
         maxEntry=tk.Entry(parent,width=5,textvariable=self.maximum)
         maxEntry.pack()
         partialLots = self.fetchall(queryPartiallyCompletedLots % (self.maximum.get(),))
-        pclots =list()
-        for lot in partialLots:
-            lotdesc = str()
-            for lotDescriptor in lot:
-                lotdesc+=str(lotDescriptor)
-                if lotDescriptor !=lot[-1]:
-                    lotdesc += ' | '
-            pclots.append(lotdesc)
+        partialLots_descriptors = [str(' | ').join(lot_info) for lot_info in partialLots]
+        # pclots =list()
+        # for lot in partialLots:
+        #     lotdesc = str()
+        #     for lotDescriptor in lot:
+        #         lotdesc+=str(lotDescriptor)
+        #         if lotDescriptor !=lot[-1]:
+        #             lotdesc += ' | '
+        #     pclots.append(lotdesc)
 
         self.plotvar = tk.StringVar(parent,value="donor name | lotnumber | how many left")
-        self.pclotsDD = tk.OptionMenu(parent,self.plotvar,"donor name | lotnumber | how many left",*pclots)
+        self.pclotsDD = tk.OptionMenu(parent,self.plotvar,"donor name | lotnumber | how many left",*partialLots_descriptors)
         self.pclotsDD.pack()
 
         DonationBanner.__init__(self,parent,ini_section=kwargs['ini_section'])
@@ -189,11 +231,15 @@ class Report(DonationBanner,DBI):
             (select donation_id from reportgen);
         """
         try:
-            donorName=self.fetchone(markReportedSQL, self.donationID)
-            self.conn.commit()
-            self.err.set(str(donorName[0]) + ' | '+str(donorName[1]) + ' removed from dropdown.')
+            if self.conn is not None:
+                donorName=self.fetchone(markReportedSQL, self.donationID)
+                self.conn.commit()
+                self.err.set(str(donorName[0]) + ' | '+str(donorName[1]) + ' removed from dropdown.')
+            else:
+                self.err.set("Database connection absent.")
         except:
             self.err.set('unable to mark provided lot reported.')
+        finally:
             return self
 
     def getTextFiles(self,event):
@@ -206,7 +252,7 @@ class Report(DonationBanner,DBI):
             SELECT d.name, don.dateReceived, don.lotNumber
             FROM donors d
             INNER JOIN donations don USING (donor_id)
-            WHERE don.donation_id = %s;
+            WHERE donation_id = %s;
             """
         self.donationInfo=self.fetchone(donationInfo,self.donationID)
         devices = self.devicesToTuple()
@@ -225,21 +271,41 @@ class Report(DonationBanner,DBI):
     def devicesToTuple(self):
         deviceInfo = \
         """
-        SELECT dts.deviceType, p.deviceSN,
+        SELECT dt.deviceType, c.deviceSN,
             CASE WHEN hd.hdsn is NULL and hd.hdpid is NULL THEN COALESCE(hd.hdsn,'')
                 WHEN hd.hdsn is NULL THEN COALESCE(hd.hdsn,'N/A')
                 ELSE hd.hdsn END,
-            p.assetTag, hd.destroyed, hd.sanitized, s.nameabbrev,
-            CASE WHEN hd.hdpid is NULL THEN TO_CHAR(p.entryDate,'MM/DD/YYYY HH24:MI')
+            g.assetTag, hd.destroyed, hd.sanitized, s.nameabbrev,
+            CASE WHEN hd.hdpid is NULL THEN (SELECT nameabbrev FROM staff INNER JOIN computers USING (staff_id))
+            ELSE (SELECT nameabbrev FROM staff INNER JOIN harddrives USING (staff_id))
+            END AS nameabbrev,
+            CASE WHEN hd.hdpid is NULL THEN TO_CHAR(g.entryDate,'MM/DD/YYYY HH24:MI')
             ELSE TO_CHAR(hd.wipeDate,'MM/DD/YYYY HH24:MI')
             END AS date
-        FROM processing p
-        INNER JOIN deviceTypes dts on dts.type_id = p.deviceType_id
-        INNER JOIN staff s on s.staff_id = p.staff_id
+        FROM donatedgoods g
+        INNER JOIN computers c USING (p_id)
         INNER JOIN harddrives hd USING (hd_id)
+        INNER JOIN deviceTypes dt USING (type_id)
         WHERE p.donation_id = %s
         ORDER BY p.entryDate;
         """
+        # deviceInfo = \
+        # """
+        # SELECT dts.deviceType, p.deviceSN,
+        #     CASE WHEN hd.hdsn is NULL and hd.hdpid is NULL THEN COALESCE(hd.hdsn,'')
+        #         WHEN hd.hdsn is NULL THEN COALESCE(hd.hdsn,'N/A')
+        #         ELSE hd.hdsn END,
+        #     p.assetTag, hd.destroyed, hd.sanitized, s.nameabbrev,
+        #     CASE WHEN hd.hdpid is NULL THEN TO_CHAR(p.entryDate,'MM/DD/YYYY HH24:MI')
+        #     ELSE TO_CHAR(hd.wipeDate,'MM/DD/YYYY HH24:MI')
+        #     END AS date
+        # FROM processing p
+        # INNER JOIN deviceTypes dts on dts.type_id = p.deviceType_id
+        # INNER JOIN staff s on s.staff_id = p.staff_id
+        # INNER JOIN harddrives hd USING (hd_id)
+        # WHERE p.donation_id = %s
+        # ORDER BY p.entryDate;
+        # """
         devices = self.fetchall(deviceInfo,self.donationID)
         cols = 'Drive	Item Type	Item Serial	HD Serial Number	Asset Tag	Destroyed	Data Sanitized	Staff	Entry Date'
         devices.insert(0,tuple(cols.split('\t')))
@@ -247,13 +313,15 @@ class Report(DonationBanner,DBI):
             devices[driveNum] = (driveNum,) + devices[driveNum]
         return tuple(devices)
     def qcDevicesToTuple(self):
+        #note that this query avoids concern with the donations id column of the qc table
         qcInfo = \
         """
-        SELECT hd.hdsn, TO_CHAR(qc.qcDate,'MM/DD/YYYY'),s.name
+        SELECT hd.hdsn, TO_CHAR(qc.qcDate,'MM/DD/YYYY'),s.nameabbrev
         FROM qualitycontrol qc
-        INNER JOIN staff s ON qc.staff_id = s.staff_id
+        INNER JOIN staff s USING (staff_id)
         INNER JOIN harddrives hd USING (hd_id)
-        WHERE qc.donation_id = %s;
+        INNER JOIN donatedgoods g USING (hd_id)
+        WHERE g.donation_id = %s;
         """
         devices = self.fetchall(qcInfo,self.donationID)
         cols = 'Sample	HD Serial Number	Date Reviewed	Staff'

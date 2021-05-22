@@ -5,7 +5,7 @@ from config import DBI
 from donationBanner import *
 from dataclasses import dataclass,fields,field
 from collections import namedtuple
-
+from Barcode_Scanner_Entries import *
 
 class InsertDeviceType(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
@@ -61,7 +61,19 @@ class InsertDrives(tk.Frame,DBI):
         stafflist = self.fetchall(getStaff)
         snames =[staff[0] for staff in stafflist]
         self.staffName = tk.StringVar(parent,value="staff:")
-        tk.OptionMenu(parent,self.staffName,"staff:",*snames).grid(row=0,column=1)
+        ROW=0
+        tk.OptionMenu(parent,self.staffName,"staff:",*snames).grid(row=ROW,column=0)
+        self.entries=BarcodeScannerMode(parent,ROW)
+        row_count = self.entries.get_rowcount()
+        self.entries.grid(row=ROW,columnspan=2,rowspan=row_count)
+        ROW+=row_count
+        ROW+=1
+        self.qualityDD.grid(row=ROW,column=0)
+        self.typeDD.grid(row=ROW,column=1)
+        ROW+=1
+        self.err = tk.StringVar(parent)
+        tk.Label(parent,textvariable=self.err).grid(row=ROW,column=0)
+        ROW+=1
         self.insertDeviceButton = tk.Button(parent,
             text='insert',
             width = 15,
@@ -78,36 +90,16 @@ class InsertDrives(tk.Frame,DBI):
             fg = "yellow",
         )
         self.insertDeviceTypeButton.bind('<Button-1>',self.NewDTPopUp)
-        self.err = tk.StringVar(parent)
-
-        #the order of fields on the form is determined by the Entry_Vals objects ordering
-        #as that's the order of "grid" in the next loop
-        Entry_Vals_Fields = fields(Entry_Vals)[:-1]
-        self.EV_fields = [Entry_Vals_Fields[i].name for i in range(len(Entry_Vals_Fields))]
-        #self.entries = namedtuple('self.entries',self.EV_fields)
-        self.entries={key : tk.Entry(parent,fg='black',bg='white',width=25) for key in self.EV_fields}
-        rowIter=1
-        for key in self.EV_fields:
-            tk.Label(parent,text=key.replace("_"," ")+":").grid(row=rowIter,column=0)
-            self.entries[key]=tk.Entry(parent,fg='black',bg='white',width=25)
-            self.entries[key].grid(row=rowIter,column=1)
-            rowIter+=1
-
-        self.qualityDD.grid(row=rowIter,column=0)
-        self.typeDD.grid(row=rowIter,column=1)
-        rowIter+=1
-        tk.Label(parent,textvariable=self.err).grid(row=rowIter,column=0)
-        rowIter+=1
-        self.insertDeviceTypeButton.grid(row=rowIter,column=0)
-        self.insertDeviceButton.grid(row=rowIter,column=1)
-        rowIter+=1
-        tk.Label(parent,text="last entries:").grid(row=rowIter,column=0) #consider including a columnspan
-        rowIter+=1
-        tk.Label(parent,textvariable=self.lastDevice.pc_id).grid(row=rowIter,column=1)
-        tk.Label(parent,textvariable=self.lastDevice.hd_id).grid(row=rowIter,column=2)
-        rowIter+=1
-        tk.Label(parent,textvariable=self.lastDevice.pc_sn).grid(row=rowIter,column=1)
-        tk.Label(parent,textvariable=self.lastDevice.hd_sn).grid(row=rowIter,column=2)
+        self.insertDeviceTypeButton.grid(row=ROW,column=0)
+        self.insertDeviceButton.grid(row=ROW,column=1)
+        ROW+=1
+        tk.Label(parent,text="last entries:").grid(row=ROW,column=0) #consider including a columnspan
+        ROW+=1
+        tk.Label(parent,textvariable=self.lastDevice.pc_id).grid(row=ROW,column=1)
+        tk.Label(parent,textvariable=self.lastDevice.hd_id).grid(row=ROW,column=2)
+        ROW+=1
+        tk.Label(parent,textvariable=self.lastDevice.pc_sn).grid(row=ROW,column=1)
+        tk.Label(parent,textvariable=self.lastDevice.hd_sn).grid(row=ROW,column=2)
     def NewDTPopUp(self,event):
         popUp = tk.Toplevel(self.parent)
         InsertDeviceType(popUp,ini_section=self.ini_section,
@@ -132,10 +124,10 @@ class InsertDrives(tk.Frame,DBI):
         if quality == "quality:":
             quality = None
             #consider forcing a quality choice here as done above with staff and type.
-        if self.entries['pc_id'].index("end") < 2:
+        if self.entries.pc_id.index("end") < 2:
             pc_id = None
         else:
-            pc_id = self.entries['pc_id'].get()
+            pc_id = self.entries.pc_id.get()
             if not (pc_id[:2] == 'MD' or pc_id[:2] == 'md'):
                 self.err.set('please provide a pid that begins with "MD"')
                 return self
@@ -143,27 +135,27 @@ class InsertDrives(tk.Frame,DBI):
                 self.err.set('please remove trailing space or tick from pid.')
                 return self
 
-        if self.entries['pc_sn'].index("end") < 2:
+        if self.entries.pc_sn.index("end") < 2:
             pc_sn = None
         else:
-            pc_sn = self.entries['pc_sn'].get()
+            pc_sn = self.entries.pc_sn.get()
             if pc_id is None:
                 self.err.set("Please provide a PC ID with Computer SN or clear Computer Serial Entry.")
                 return self
             if pc_sn[0] == " " or pc_sn[0] == "\`" or pc_sn[-1] == " " or pc_sn[-1] =="\`":
                 self.err.set('please provide a valid device serial or clear the form. Check for an extra space at the end of the entry or something..')
                 return self
-        if self.entries['hd_id'].index("end") < 2:
+        if self.entries.hd_id.index("end") < 2:
             hd_id=None
         else:
-            hd_id = self.entries['hd_id'].get()
+            hd_id = self.entries.hd_id.get()
             if hd_id[0] == " " or hd_id[0]== "\`" or hd_id[-1] == " " or hd_id[-1]== "\`":
                 self.err.set('please provide a valid hard drive id or clear the entry')
                 return self
-        if self.entries['hd_sn'].index("end") < 2:
+        if self.entries.hd_sn.index("end") < 2:
             hd_sn = None
         else:
-            hd_sn = self.entries['hd_sn'].get()
+            hd_sn = self.entries.hd_sn.get()
             if hd_id is None:
                 self.err.set("Please provide a HD ID with Hard Drive or clear Hard Drive Serial Entry.")
                 return self
@@ -171,8 +163,8 @@ class InsertDrives(tk.Frame,DBI):
                 self.err.set('please provide a valid hard drive serial or clear the entry. Check the beginning and end of the serial number for an extra space or something.')
                 return self
 
-        if self.entries['asset_tag'].index("end") != 0:
-            asset_tag = self.entries['asset_tag'].get()
+        if self.entries.asset_tag.index("end") != 0:
+            asset_tag = self.entries.asset_tag.get()
             if asset_tag[0] == " " or asset_tag[0] =="\`" or asset_tag[-1] == " " or asset_tag[-1]== "\`":
                 self.err.set('Please provide a valid asset tag. Check the beginning and end of the serial number for an extra space or something.')
                 return self
@@ -181,8 +173,6 @@ class InsertDrives(tk.Frame,DBI):
         return (donationID,asset_tag,pc_id,pc_sn,hd_id,hd_sn,staff,type,quality)
     def insertDevice(self,event):
         args = self.get_vals_from_form()
-        for arg in args:
-            print(type(arg),arg)
         submitted_headers= Header_Vals(args[0],args[6],args[7],args[8])
         submitted_form=Entry_Vals(args[2],args[3],args[4],args[5],args[1])
         insertDevice = \
@@ -287,8 +277,9 @@ class InsertDrives(tk.Frame,DBI):
         insert_device_sql = insertDevice.format(computer_insert,hd_insert)
         try:
             out=self.fetchone(insert_device_sql,*args)
+            print('out',out)
             self.conn.commit()
-            print(out,'here')
+            #note: next line is breaking.
             self.update_last_device_log(out,submitted_form)
             self.clear_form()
             self.entries.pc_id.focus()
@@ -301,7 +292,7 @@ class InsertDrives(tk.Frame,DBI):
     def update_last_device_log(self,ids,submitted_form):
         for key in self.EV_fields:
             getattr(self.lastDevice,key).set(getattr(submitted_form,key))
-        self.lastDevice.pks=ids
+        #self.lastDevice.pks=ids
         return self
     def clear_form(self):
         for key in self.EV_fields:
@@ -334,40 +325,17 @@ class Review(InsertDrives):
         pass
 
 @dataclass(order=True,frozen=True)
-class Entry_Vals:
-    pc_id: str = None
-    pc_sn: str = None
-    hd_id: str = None
-    hd_sn: str = None
-    asset_tag: str = None
-    pks : list[int] =field(default_factory=list)
-@dataclass(order=True,frozen=True)
 class Header_Vals:
     donation_id: str = None
     staff_name: str = None
     type_name: str = None
     quality_name: str = None
+    # pks : list[int] =field(default_factory=list)
 
-class Form_Entries:
-    def __init__(self,parent):
-        self.pc_id=tk.Entry(parent,fg='black',bg='white',width=25),
-        self.pc_sn=tk.Entry(parent,fg='black',bg='white',width=25),
-        self.hd_id=tk.Entry(parent,fg='black',bg='white',width=25),
-        self.hd_sn=tk.Entry(parent,fg='black',bg='white',width=25),
-        self.asset_tag=tk.Entry(parent,fg='black',bg='white',width=25)
-
-class Form_Stringvars:
-    def __init__(self,parent):
-        self.pc_id=tk.StringVar(parent)
-        self.pc_sn=tk.StringVar(parent)
-        self.hd_id=tk.StringVar(parent)
-        self.hd_sn=tk.StringVar(parent)
-        self.asset_tag=tk.StringVar(parent)
 class extractionGUI(ttk.Notebook):
     def __init__(self,parent,*args,**kwargs):
         donationIDVar = tk.StringVar(parent)
-        last_device = Entry_Vals()
-        lastDevice = Form_Stringvars(parent)
+        lastDevice = Entry_Form(parent,None,TO_GENERATE='VARIABLES ONLY')
         #self.sheetIDVar = tk.StringVar()
         DonationBanner(parent,
             ini_section=kwargs['ini_section'],
@@ -396,5 +364,5 @@ class extractionGUI(ttk.Notebook):
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Hard Drive Extraction Station")
-    app = extractionGUI(root,ini_section='appendage')
+    app = extractionGUI(root,ini_section='local_launcher')
     app.mainloop()

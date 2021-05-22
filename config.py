@@ -31,6 +31,7 @@ class DBI:
             self.cur = self.conn.cursor()
         except (Exception, psycopg2.DatabaseError) as error:
             print(error)
+            self.conn = None
         finally:
             return self
     def restartConnection(self,ini_section):
@@ -69,14 +70,18 @@ class DBI:
             return out
     def fetchone(self,sql,*args):
         #returns one tuple
-        if self.testConnection() == 0:
-            self.restartConnection(self.ini_section)
-        self.cur = self.conn.cursor()
-        if len(args) != 0:
-            self.cur.execute(sql,(*args,))
-        else:
-            self.cur.execute(sql)
-        return self.cur.fetchone()
+        try:
+            if self.testConnection() == 0:
+                self.restartConnection(self.ini_section)
+            self.cur = self.conn.cursor()
+            if len(args) != 0:
+                self.cur.execute(sql,(*args,))
+            else:
+                self.cur.execute(sql)
+            return self.cur.fetchone()
+        except (Exception, psycopg2.DatabaseError) as error:
+            print(error)
+            return None
 
     def fetchall(self,sql,*args):
         #returns a list of tuples

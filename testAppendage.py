@@ -68,77 +68,77 @@ class InsertLog(tk.Frame,DBI):
             err = 'success!'
         self.outVar.set(err)
 
-class SNPK(tk.Frame,DBI):
-    def __init__(self,parent,*args,**kwargs):
-        tk.Frame.__init__(self,parent)
-        DBI.__init__(self,ini_section=kwargs['ini_section'])
-        self.microsoftSNLabel = tk.Label(parent,text="Microsoft SN:")
-        self.microsoftPKLabel = tk.Label(parent,text="Microsoft PK")
-        self.microsoftSN = tk.Entry(parent,fg='black',bg='white',width=20)
-        self.PKEntry1 = tk.StringVar()
-        self.PKEntry2 = tk.StringVar()
-        self.PKEntry3 = tk.StringVar()
-        self.PKEntry4 = tk.StringVar()
-        self.PKEntry5 = tk.StringVar()
-        self.microsoftPK1 = tk.Entry(parent,fg='black',bg='white',width=6,textvariable=self.PKEntry1)
-        self.microsoftPK2 = tk.Entry(parent,fg='black',bg='white',width=6,textvariable=self.PKEntry2)
-        self.microsoftPK3 = tk.Entry(parent,fg='black',bg='white',width=6,textvariable=self.PKEntry3)
-        self.microsoftPK4 = tk.Entry(parent,fg='black',bg='white',width=6,textvariable=self.PKEntry4)
-        self.microsoftPK5 = tk.Entry(parent,fg='black',bg='white',width=6,textvariable=self.PKEntry5)
-        self.microsoftPK6 = tk.Entry(parent,fg='black',bg='white',width=6)
-
-        self.microsoftSNLabel.grid(column=0,row=0)
-        self.microsoftSN.grid(row=0,column=1)
-        self.microsoftPKLabel.grid(row=1,column=0)
-        self.microsoftPK1.grid(row=1,column=1)
-        self.microsoftPK2.grid(row=1,column=2)
-        self.microsoftPK3.grid(row=1,column=3)
-        self.microsoftPK4.grid(row=1,column=4)
-        self.microsoftPK5.grid(row=1,column=5)
-        self.microsoftPK6.grid(row=1,column=6)
-        self.submitSNPK = tk.Button(parent,
-            text='submit',
-            width = 15,
-            height = 2,
-            bg = "blue",
-            fg = "yellow",
-        )
-        self.submitSNPK.bind('<Button-1>',self.insertSNPK)
-        self.submitSNPK.grid(row=2,column=1)
-        self.err = tk.StringVar(parent)
-        self.errorLabel = tk.Label(parent,textvariable=self.err)
-        self.errorLabel.grid(row=2,column=0)
-
-        self.PKEntry1.trace("w", lambda *args: self.microsoftPK2.focus() if len(self.PKEntry1.get())==5 else False)
-        self.PKEntry2.trace("w", lambda *args: self.microsoftPK3.focus() if len(self.PKEntry2.get())==5 else False)
-        self.PKEntry3.trace("w", lambda *args: self.microsoftPK4.focus() if len(self.PKEntry3.get())==5 else False)
-        self.PKEntry4.trace("w", lambda *args: self.microsoftPK5.focus() if len(self.PKEntry4.get())==5 else False)
-        self.PKEntry5.trace("w", lambda *args: self.microsoftPK6.focus() if len(self.PKEntry5.get())==5 else False)
-    def autoMoveCursor(self,textVar):
-        if len(textVar.get()) == 5:
-            self.microsoftPK2.focus()
-    def insertSNPK(self,event):
-        pk=[]
-        pk.append(self.microsoftPK1.get())
-        pk.append(self.microsoftPK2.get())
-        pk.append(self.microsoftPK3.get())
-        pk.append(self.microsoftPK4.get())
-        pk.append(self.microsoftPK5.get())
-        pk.append(self.microsoftPK6.get())
-        pks = ''
-        for item in pk:
-            if len(item) >0:
-                pks+=item
-        sn=self.microsoftSN.get()
-        back = self.insertToDB(testStation.insertSNPK,sn,pks)
-        self.err.set(back)
-        self.microsoftPK1.delete(0,'end')
-        self.microsoftPK2.delete(0,'end')
-        self.microsoftPK3.delete(0,'end')
-        self.microsoftPK4.delete(0,'end')
-        self.microsoftPK5.delete(0,'end')
-        self.microsoftPK6.delete(0,'end')
-        self.microsoftSN.delete(0,'end')
+# class SNPK(tk.Frame,DBI):
+#     def __init__(self,parent,*args,**kwargs):
+#         tk.Frame.__init__(self,parent)
+#         DBI.__init__(self,ini_section=kwargs['ini_section'])
+#         self.microsoftSNLabel = tk.Label(parent,text="Microsoft SN:")
+#         self.microsoftPKLabel = tk.Label(parent,text="Microsoft PK")
+#         self.microsoftSN = tk.Entry(parent,fg='black',bg='white',width=20)
+#         self.PKEntry1 = tk.StringVar()
+#         self.PKEntry2 = tk.StringVar()
+#         self.PKEntry3 = tk.StringVar()
+#         self.PKEntry4 = tk.StringVar()
+#         self.PKEntry5 = tk.StringVar()
+#         self.microsoftPK1 = tk.Entry(parent,fg='black',bg='white',width=6,textvariable=self.PKEntry1)
+#         self.microsoftPK2 = tk.Entry(parent,fg='black',bg='white',width=6,textvariable=self.PKEntry2)
+#         self.microsoftPK3 = tk.Entry(parent,fg='black',bg='white',width=6,textvariable=self.PKEntry3)
+#         self.microsoftPK4 = tk.Entry(parent,fg='black',bg='white',width=6,textvariable=self.PKEntry4)
+#         self.microsoftPK5 = tk.Entry(parent,fg='black',bg='white',width=6,textvariable=self.PKEntry5)
+#         self.microsoftPK6 = tk.Entry(parent,fg='black',bg='white',width=6)
+#
+#         self.microsoftSNLabel.grid(column=0,row=0)
+#         self.microsoftSN.grid(row=0,column=1)
+#         self.microsoftPKLabel.grid(row=1,column=0)
+#         self.microsoftPK1.grid(row=1,column=1)
+#         self.microsoftPK2.grid(row=1,column=2)
+#         self.microsoftPK3.grid(row=1,column=3)
+#         self.microsoftPK4.grid(row=1,column=4)
+#         self.microsoftPK5.grid(row=1,column=5)
+#         self.microsoftPK6.grid(row=1,column=6)
+#         self.submitSNPK = tk.Button(parent,
+#             text='submit',
+#             width = 15,
+#             height = 2,
+#             bg = "blue",
+#             fg = "yellow",
+#         )
+#         self.submitSNPK.bind('<Button-1>',self.insertSNPK)
+#         self.submitSNPK.grid(row=2,column=1)
+#         self.err = tk.StringVar(parent)
+#         self.errorLabel = tk.Label(parent,textvariable=self.err)
+#         self.errorLabel.grid(row=2,column=0)
+#
+#         self.PKEntry1.trace("w", lambda *args: self.microsoftPK2.focus() if len(self.PKEntry1.get())==5 else False)
+#         self.PKEntry2.trace("w", lambda *args: self.microsoftPK3.focus() if len(self.PKEntry2.get())==5 else False)
+#         self.PKEntry3.trace("w", lambda *args: self.microsoftPK4.focus() if len(self.PKEntry3.get())==5 else False)
+#         self.PKEntry4.trace("w", lambda *args: self.microsoftPK5.focus() if len(self.PKEntry4.get())==5 else False)
+#         self.PKEntry5.trace("w", lambda *args: self.microsoftPK6.focus() if len(self.PKEntry5.get())==5 else False)
+#     def autoMoveCursor(self,textVar):
+#         if len(textVar.get()) == 5:
+#             self.microsoftPK2.focus()
+#     def insertSNPK(self,event):
+#         pk=[]
+#         pk.append(self.microsoftPK1.get())
+#         pk.append(self.microsoftPK2.get())
+#         pk.append(self.microsoftPK3.get())
+#         pk.append(self.microsoftPK4.get())
+#         pk.append(self.microsoftPK5.get())
+#         pk.append(self.microsoftPK6.get())
+#         pks = ''
+#         for item in pk:
+#             if len(item) >0:
+#                 pks+=item
+#         sn=self.microsoftSN.get()
+#         back = self.insertToDB(testStation.insertSNPK,sn,pks)
+#         self.err.set(back)
+#         self.microsoftPK1.delete(0,'end')
+#         self.microsoftPK2.delete(0,'end')
+#         self.microsoftPK3.delete(0,'end')
+#         self.microsoftPK4.delete(0,'end')
+#         self.microsoftPK5.delete(0,'end')
+#         self.microsoftPK6.delete(0,'end')
+#         self.microsoftSN.delete(0,'end')
 class AssociatePidAndLicense(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent)
@@ -207,13 +207,13 @@ class testGUI(ttk.Notebook):
         ttk.Notebook.__init__(self,parent,*args)
         self.tab1 = ttk.Frame()
         self.tab2 = ttk.Frame()
-        self.tab3 = ttk.Frame()
-        SNPK(self.tab3,ini_section=kwargs['ini_section'])
+        #self.tab3 = ttk.Frame()
+        #SNPK(self.tab3,ini_section=kwargs['ini_section'])
         InsertLog(self.tab2,ini_section=kwargs['ini_section'])
         AssociatePidAndLicense(self.tab1,ini_section=kwargs['ini_section'])
         self.add(self.tab1,text="Attach Licenses to Devices")
         self.add(self.tab2,text="Log Issue")
-        self.add(self.tab3,text="Insert More Licenses")
+        #self.add(self.tab3,text="Insert More Licenses")
         #self.add(self.banner)
         self.pack(expand=True,fill='both')
 if __name__ == "__main__":
