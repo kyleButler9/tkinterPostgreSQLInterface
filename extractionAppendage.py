@@ -6,7 +6,15 @@ from donationBanner import *
 from dataclasses import dataclass,fields,field
 from collections import namedtuple
 from Barcode_Scanner_Entries import *
-
+@dataclass(frozen=True)
+class Table_Keys:
+    dg: str = None
+    pcs: str = None
+    hds: str = None
+    donations: str = None
+    # id, p_id,hd_id,donation_id;
+    # this is the order of keys that comes outta the insert device query
+    # whenever you hit insert.
 class InsertDeviceType(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         self.parent=parent
@@ -37,12 +45,13 @@ class InsertDeviceType(tk.Frame,DBI):
             self.dtdd['menu'].add_command(label=type[0],
                 command=tk._setit(self.typeVar,type[0]))
 class InsertDrives(tk.Frame,DBI):
-    def __init__(self,parent,*args,**kwargs):
+    def __init__(self,parent,Barcode_Vals,*args,**kwargs):
         self.parent = parent
         tk.Frame.__init__(self,parent,*args)
         DBI.__init__(self,ini_section = kwargs['ini_section'])
         self.donationID = kwargs['donationID']
         self.lastDevice=kwargs['lastDevice_info']
+        self.lastDevice_nonBarCode=kwargs['lastDevice_nonBarCode']
         #self.sheetIDVar = kwargs['sheetID']
         deviceTypes = self.fetchall("SELECT deviceType FROM deviceTypes;")
         dtypes =[type[0] for type in deviceTypes]
@@ -63,7 +72,7 @@ class InsertDrives(tk.Frame,DBI):
         self.staffName = tk.StringVar(parent,value="staff:")
         ROW=0
         tk.OptionMenu(parent,self.staffName,"staff:",*snames).grid(row=ROW,column=0)
-        self.entries=BarcodeScannerMode(parent,ROW)
+        self.entries=BarcodeScannerMode(parent,ROW,Barcode_Vals)
         row_count = self.entries.get_rowcount()
         self.entries.grid(row=ROW,columnspan=2,rowspan=row_count)
         ROW+=row_count
@@ -94,6 +103,8 @@ class InsertDrives(tk.Frame,DBI):
         self.insertDeviceButton.grid(row=ROW,column=1)
         ROW+=1
         tk.Label(parent,text="last entries:").grid(row=ROW,column=0) #consider including a columnspan
+        tk.Label(parent,text="Computer").grid(row=ROW,column=1)
+        tk.Label(parent,text="HD").grid(row=ROW,column=2)
         ROW+=1
         tk.Label(parent,textvariable=self.lastDevice.pc_id).grid(row=ROW,column=1)
         tk.Label(parent,textvariable=self.lastDevice.hd_id).grid(row=ROW,column=2)
@@ -173,8 +184,8 @@ class InsertDrives(tk.Frame,DBI):
         return (donationID,asset_tag,pc_id,pc_sn,hd_id,hd_sn,staff,type,quality)
     def insertDevice(self,event):
         args = self.get_vals_from_form()
-        submitted_headers= Header_Vals(args[0],args[6],args[7],args[8])
-        submitted_form=Entry_Vals(args[2],args[3],args[4],args[5],args[1])
+        submitted_headers= NonBarcode_Vals(args[0],args[6],args[7],args[8])
+        submitted_form=Barcode_Vals(args[2],args[3],args[4],args[5],args[1])
         insertDevice = \
         """
         DROP TABLE IF EXISTS user_inputs;
@@ -277,10 +288,10 @@ class InsertDrives(tk.Frame,DBI):
         insert_device_sql = insertDevice.format(computer_insert,hd_insert)
         try:
             out=self.fetchone(insert_device_sql,*args)
-            print('out',out)
+            self.lastDevice.table_keys = Table_Keys(*out)
             self.conn.commit()
             #note: next line is breaking.
-            self.update_last_device_log(out,submitted_form)
+            self.update_last_device_log(out,submitted_form,submitted_headers)
             self.clear_form()
             self.entries.pc_id.focus()
             self.err.set("success!")
@@ -289,26 +300,32 @@ class InsertDrives(tk.Frame,DBI):
             print(error)
         finally:
             return self
-    def update_last_device_log(self,ids,submitted_form):
-        for key in self.EV_fields:
+    def update_last_device_log(self,ids,submitted_form,submitted_headers):
+        for key in self.lastDevice.get_entryfield_names():
             getattr(self.lastDevice,key).set(getattr(submitted_form,key))
+        Entry_Vals_Fields = fields(submitted_headers)# [:-1]
+        EV_field_names = [Entry_Vals_Field.name for Entry_Vals_Field in Entry_Vals_Fields]
+        for key in EV_field_names:
+            getattr(self.lastDevice_nonBarCode,key).set(getattr(submitted_headers,key))
         #self.lastDevice.pks=ids
         return self
     def clear_form(self):
-        for key in self.EV_fields:
-            self.entries[key].delete(0,'end')
+        for key in self.entries.get_entryfield_names():
+            getattr(self.entries,key).delete(0,'end')
         return self
 
 class Review(InsertDrives):
-    def __init__(self,parent,*args,**kwargs):
+    def __init__(self,parent,Barcode_Vals,*args,**kwargs):
         self.parent = parent
         self.ini_section=kwargs['ini_section']
-        InsertDrives.__init__(self,self.parent,
+        self.donationID=kwargs['donationID']
+        InsertDrives.__init__(self,self.parent,Barcode_Vals,
             ini_section=kwargs['ini_section'],
             donationID=kwargs['donationID'],
-            lastDevice_info=kwargs['lastDevice_info'])
+            lastDevice_info=kwargs['lastDevice_info'],
+            lastDevice_nonBarCode=kwargs['lastDevice_nonBarCode'])
         self.repopulate_form = tk.Button(parent,
-            text='insert',
+            text='Get Last Submission',
             width = 15,
             height = 2,
             bg = "blue",
@@ -318,40 +335,133 @@ class Review(InsertDrives):
         self.repopulate_form.grid()
     def repopulate(self,event):
         self.clear_form()
-        for key in self.EV_fields:
+        for key in self.lastDevice.get_entryfield_names():
             getattr(self.entries,key).insert(0,getattr(self.lastDevice,key).get())
+        if self.donationID.get() != self.lastDevice_nonBarCode.donation_id:
+            donationID_changed_sql = \
+            """
+            UPDATE donatedgoods
+            SET donation_id = %s
+            WHERE dg_id = %s;
+            """
+        print(self.lastDevice_nonBarCode)
+        print(self.lastDevice_nonBarCode.staff_name.get(),self.lastDevice_nonBarCode.type_name.get(),'go')
+        self.staffName.set(self.lastDevice_nonBarCode.staff_name.get())
+        self.typeName.set(self.lastDevice_nonBarCode.type_name.get())
+        self.qualityName.set(self.lastDevice_nonBarCode.quality_name.get())
+        #getattr(self.entries,key).insert(0,getattr(self.lastDevice_nonBarCode,key).get())
         return self
     def InsertDrives(self,event):
-        pass
+        keys = self.lastDevice.table_keys()
+        sql = \
+        """
+        DROP TABLE IF EXISTS ui;
+        CREATE TEMP TABLE ui(
+            devicetype_id integer,
+            pc_sn VARCHAR(20),
+            hd_sn VARCHAR(20),
+            pc_id VARCHAR(20),
+            hd_id VARCHAR(20),
+            asset_tag VARCHAR(255),
+            quality_id integer,
+            staff_id integer,
+            intake_date timestamp,
+            donation_id integer,
+            pc_table_id INTEGER,
+            hd_table_id INTEGER,
+            dg_table_id INTEGER
+            );
+        INSERT INTO user_inputs(
+            dg_table_id,pc_table_id,hd_table_id,donation_id,
+            donation_id,
+            asset_tag,
+            pc_id,
+            pc_sn,
+            hd_id,
+            hd_sn,
+            staff_id,
+            devicetype_id,
+            quality_id,
+            intake_date,
+	)
+        VALUES (%s,%s,%s,%s,
+            %s,
+            %s,
+            TRIM(LOWER(%s)),
+            TRIM(LOWER(%s)),
+            TRIM(LOWER(%s)),
+            TRIM(LOWER(%s)),
+            (SELECT s.staff_id FROM staff s WHERE s.name =%s),
+            (SELECT dt.type_id FROM deviceTypes dt WHERE dt.deviceType = %s),
+            (SELECT quality_id from qualities where quality = %s),
+            NOW()
+        );
+        WITH c as (
+            UPDATE computers
+            SET pid=(select pc_id from ui),
+                sn =(select pc_sn from ui),
+                type_id=(select type_id from ui)
+                quality_id=(select quality_id from ui)
+            WHERE p_id = (select pc_table_id from ui)
+            ON CONFLICT (pid)
+                DO UPDATE SET
+                sn=EXCLUDED.sn
+                type_id=EXCLUDED.type_id
+                quality_id=EXCLUDED.quality_id
+            RETURNING p_id
+            ), h as (
+                UPDATE harddrives
+                SET hdpid=(select hd_id from ui),
+                    hdsn= (select hd_sn from ui),
+                WHERE hd_id = (select hd_table_id from ui)
+                ON CONFLICT (hdpid)
+                    DO UPDATE SET
+                    hdsn= EXCLUDED.hdsn
+            )
+        """
+
 
 @dataclass(order=True,frozen=True)
-class Header_Vals:
-    donation_id: str = None
-    staff_name: str = None
-    type_name: str = None
-    quality_name: str = None
+class NonBarcode_Vals:
+    donation_id: int = None
+    staff_name: str = "staff:"
+    type_name: str = "device type:"
+    quality_name: str = "quality:"
     # pks : list[int] =field(default_factory=list)
+# this class here determines the entries part of the gui.
+# you can add another label and entry row
+# by merely editing this class and adding another row there
+@dataclass(order=True,frozen=True)
+class Barcode_Vals:
+    pc_id: str = None
+    pc_sn: str = None
+    hd_id: str = None
+    hd_sn: str = None
+    asset_tag: str = None
 
 class extractionGUI(ttk.Notebook):
     def __init__(self,parent,*args,**kwargs):
         donationIDVar = tk.StringVar(parent)
-        lastDevice = Entry_Form(parent,None,TO_GENERATE='VARIABLES ONLY')
+        lastDevice_nonBarCode=Entry_Form(parent,None,NonBarcode_Vals,TO_GENERATE='VARIABLES ONLY')
+        lastDevice = Entry_Form(parent,None,Barcode_Vals,TO_GENERATE='VARIABLES ONLY')
         #self.sheetIDVar = tk.StringVar()
         DonationBanner(parent,
             ini_section=kwargs['ini_section'],
             donationIDVar = donationIDVar)
         ttk.Notebook.__init__(self,parent,*args)
         self.tab1 = ttk.Frame()
-        InsertDrives(self.tab1,
+        InsertDrives(self.tab1,Barcode_Vals,
             ini_section=kwargs['ini_section'],
             donationID=donationIDVar,
-            lastDevice_info=lastDevice)
+            lastDevice_info=lastDevice,
+            lastDevice_nonBarCode=lastDevice_nonBarCode)
         parent.bind('<Control-s>',InsertDrives.insertDevice)
         self.tab2 = ttk.Frame()
-        Review(self.tab2,
+        Review(self.tab2,Barcode_Vals,
             ini_section=kwargs['ini_section'],
             donationID=donationIDVar,
-            lastDevice_info=lastDevice)
+            lastDevice_info=lastDevice,
+            lastDevice_nonBarCode=lastDevice_nonBarCode)
             #sheetID = self.sheetIDVar)
         # GenerateReport(self.tab3,
         #     ini_section=kwargs['ini_section'],

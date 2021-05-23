@@ -5,19 +5,11 @@ from os import system
 from datetime import datetime,timedelta
 from dataclasses import dataclass,field,fields
 import time
-# this class here determines the entries part of the gui.
-# you can add another label and entry row
-# by merely editing this class and adding another row there
-@dataclass(order=True,frozen=True)
-class Entry_Vals:
-    pc_id: str = None
-    pc_sn: str = None
-    hd_id: str = None
-    hd_sn: str = None
-    asset_tag: str = None
+
+THRESHOLD=100000
 
 class Entry_Form(tk.Frame):
-    def __init__(self,parent,ROW,*args,**kwargs):
+    def __init__(self,parent,ROW,Entry_Vals,*args,**kwargs):
         self.parent=parent
         tk.Frame.__init__(self,parent,*args)
         # note that we're ignoring the pks list with the [:-1] below
@@ -51,6 +43,8 @@ class Entry_Form(tk.Frame):
                 tk.Label(self.parent,text=key.replace("_"," ")+":").grid(row=ROW,column=LABEL_COLUMN)
                 getattr(self,key).grid(row=ROW,column=ENTRY_COLUMN)
                 ROW+=1
+        else:
+            print('can\'t grid a VARIABLES ONLY generation.')
         return self
     def get_rowcount(self):
         return self.row_count
@@ -63,7 +57,7 @@ class Entry_Form(tk.Frame):
 class BarcodeScannerMode(Entry_Form):
     #note: this class is not finished. It still needs help
     # this is not the best way to handle scanner vs. keyboard
-    def __init__(self,parent,ROW,*args,**kwargs):
+    def __init__(self,parent,ROW,Entry_Vals,*args,**kwargs):
         self.parent=parent
         # this button toggles between Keyboard mode and Scanner mode.
         self.Button = tk.Button(parent,
@@ -76,7 +70,7 @@ class BarcodeScannerMode(Entry_Form):
         self.Button.bind('<Button-1>',self.bind_or_unbind)
         self.Button.grid(row=ROW,column=1)
         ROW+=1
-        Entry_Form.__init__(self,parent,ROW,*args,**kwargs)
+        Entry_Form.__init__(self,parent,ROW,Entry_Vals,*args,**kwargs)
         # Entry_Form adds to self the attributes: self.row_count, self.EV_field_names,...
         self.grid(row=ROW,columnspan=2,rowspan=self.row_count)
         self.Pressed = dict()
@@ -120,7 +114,6 @@ class BarcodeScannerMode(Entry_Form):
         # i.e. as long as a keyboard keypress by a human takes,
         # then delete the last.
         #tasks: need to add consideration of backspace key to ignore it
-        THRESHOLD=100000
         NOW=datetime.now()
         try:
             WHEN_PRESSED=self.Pressed[e.widget][e.char]
@@ -152,6 +145,36 @@ class BarcodeScannerMode(Entry_Form):
     def human_keyup(self,e):
         return self
 
+# class DD_Form(tk.Frame):
+#     def __init__(self,parent,ROW,Entry_Vals,*args,**kwargs):
+#         self.parent=parent
+#         tk.Frame.__init__(self,parent,Entry_Vals,*args)
+#         # note that we're ignoring the pks list with the [:-1] below
+#         #      that we're using the Entry_Vals object to determine the fields in the Entry Form
+#         self.Entry_Vals_Fields = fields(Entry_Vals)# [:-1]
+#         self.EV_field_names = [Entry_Vals_Field.name for Entry_Vals_Field in self.Entry_Vals_Fields]
+#         self.row_count=len(self.EV_field_names)
+#         for key in self.EV_field_names:
+#             string_var=None
+#             string_var=tk.StringVar(parent)
+#             setattr(self,key,string_var)
+#         self._grid(ROW,switch)
+#     def get_rowcount(self):
+#         return self.row_count
+#     def get_entry_fields(self):
+#         return self.Entry_Vals_Fields
+#     def get_entryfield_names(self):
+#         return self.EV_field_names
+# this class here determines the entries part of the gui.
+# you can add another label and entry row
+# by merely editing this class and adding another row there
+@dataclass(order=True,frozen=True)
+class Entry_Vals_Main:
+    pc_id: str = None
+    pc_sn: str = None
+    hd_id: str = None
+    hd_sn: str = None
+    asset_tag: str = None
 if __name__ == "__main__":
     #when you run the script, actually only this stuff below runs. Everything above was definitions. Within definitions you instantiate other things you've defined,
     #but its all just definitions! Up until the stuff below.
@@ -161,6 +184,6 @@ if __name__ == "__main__":
     root.title("Log Licenses")
     #here we instantiate the SNPK class (which itself instantiates the other classes and so on, so forth)
     #ini_section is the section that has the DB info in the .ini file
-    app = BarcodeScannerMode(root,0,ini_section='local_launcher')
+    app = BarcodeScannerMode(root,0,Entry_Vals_Main,ini_section='local_launcher')
     #this just runs the GUI. And we're off!
     app.mainloop()
