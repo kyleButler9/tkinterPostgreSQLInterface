@@ -6,6 +6,7 @@ from donationBanner import *
 from dataclasses import dataclass,fields,field
 from collections import namedtuple
 from Barcode_Scanner_Entries import *
+from batchExecuteSQL import batchExecuteSqlCommands
 @dataclass(frozen=True)
 class Table_Keys:
     dg: str = None
@@ -337,89 +338,86 @@ class Review(InsertDrives):
         self.clear_form()
         for key in self.lastDevice.get_entryfield_names():
             getattr(self.entries,key).insert(0,getattr(self.lastDevice,key).get())
-        if self.donationID.get() != self.lastDevice_nonBarCode.donation_id:
-            donationID_changed_sql = \
-            """
-            UPDATE donatedgoods
-            SET donation_id = %s
-            WHERE dg_id = %s;
-            """
-        print(self.lastDevice_nonBarCode)
-        print(self.lastDevice_nonBarCode.staff_name.get(),self.lastDevice_nonBarCode.type_name.get(),'go')
         self.staffName.set(self.lastDevice_nonBarCode.staff_name.get())
         self.typeName.set(self.lastDevice_nonBarCode.type_name.get())
         self.qualityName.set(self.lastDevice_nonBarCode.quality_name.get())
         #getattr(self.entries,key).insert(0,getattr(self.lastDevice_nonBarCode,key).get())
         return self
     def InsertDrives(self,event):
-        keys = self.lastDevice.table_keys()
-        sql = \
-        """
-        DROP TABLE IF EXISTS ui;
-        CREATE TEMP TABLE ui(
-            devicetype_id integer,
-            pc_sn VARCHAR(20),
-            hd_sn VARCHAR(20),
-            pc_id VARCHAR(20),
-            hd_id VARCHAR(20),
-            asset_tag VARCHAR(255),
-            quality_id integer,
-            staff_id integer,
-            intake_date timestamp,
-            donation_id integer,
-            pc_table_id INTEGER,
-            hd_table_id INTEGER,
-            dg_table_id INTEGER
-            );
-        INSERT INTO user_inputs(
-            dg_table_id,pc_table_id,hd_table_id,donation_id,
-            donation_id,
-            asset_tag,
-            pc_id,
-            pc_sn,
-            hd_id,
-            hd_sn,
-            staff_id,
-            devicetype_id,
-            quality_id,
-            intake_date,
-	)
-        VALUES (%s,%s,%s,%s,
-            %s,
-            %s,
-            TRIM(LOWER(%s)),
-            TRIM(LOWER(%s)),
-            TRIM(LOWER(%s)),
-            TRIM(LOWER(%s)),
-            (SELECT s.staff_id FROM staff s WHERE s.name =%s),
-            (SELECT dt.type_id FROM deviceTypes dt WHERE dt.deviceType = %s),
-            (SELECT quality_id from qualities where quality = %s),
-            NOW()
-        );
-        WITH c as (
-            UPDATE computers
-            SET pid=(select pc_id from ui),
-                sn =(select pc_sn from ui),
-                type_id=(select type_id from ui)
-                quality_id=(select quality_id from ui)
-            WHERE p_id = (select pc_table_id from ui)
-            ON CONFLICT (pid)
-                DO UPDATE SET
-                sn=EXCLUDED.sn
-                type_id=EXCLUDED.type_id
-                quality_id=EXCLUDED.quality_id
-            RETURNING p_id
-            ), h as (
-                UPDATE harddrives
-                SET hdpid=(select hd_id from ui),
-                    hdsn= (select hd_sn from ui),
-                WHERE hd_id = (select hd_table_id from ui)
-                ON CONFLICT (hdpid)
-                    DO UPDATE SET
-                    hdsn= EXCLUDED.hdsn
-            )
-        """
+        donatedgoods_vals = tuple()
+        donatedgoods_command=str()
+        donatedgoods_command += "Update donatedgoods "
+        idChange=False
+        if self.donationID.get() != self.lastDevice_nonBarCode.donation_id.get():
+            donatedgoods_command += "SET donation_id= %s "
+            donatedgoods_vals+= (self.donationID.get(),)
+            idChange=True
+        if self.staffName.get() != self.lastDevice_nonBarCode.staff_name.get():
+            if idChange:
+                donatedgoods_command+=', '
+            donatedgoods_command += "SET staff_id=(SELECT staff_id from staff where name = %s) "
+            donatedgoods_vals+= (self.staffName.get(),)
+        donatedgoods_command+="Where dg_id=%s" + ';'
+        donatedgoods_vals +=(self.lastDevice.table_keys.dg,)
+        donatedgoods = UpdateSql(donatedgoods_command,donatedgoods_vals)
+        computers_vals=tuple()
+        computers_command=str()
+        computers_command+="UPDATE computers "
+        typeChange=False
+        if self.typeName.get() != self.lastDevice_nonBarCode.type_name.get():
+            computers_command += "SET type_id=(SELECT type_id from devicetypes where devicetype = %s)"
+            computers_vals+=(self.typeName.get(),)
+            typeChange=True
+        if self.qualityName.get() != self.lastDevice_nonBarCode.quality_name.get():
+            if typeChange:
+                sql_commands+=', '
+            sql_commands += "SET quality_id=(SELECT quality_id from qualities where quality = %s)" + ' '
+            computers_vals+=(self.qualityName.get(),)
+        computers_command+="WHERE p_id=(SELECT p_id from donatedgoods where dg_id = %s);"
+        computers_vals +=(self.lastDevice.table_keys.dg,)
+        computers = UpdateSql(computers_command,computers_vals)
+        nonBarcode_Commands =tuple(donatedgoods,computers,)
+        barcode_commands=tuple()
+        if getattr(self.entries,'pc_sn').get() !=getattr(self.lastDevice,'pc_sn').get():
+            computers_command ="""
+            Update computers
+            SET sn = %s
+            WHERE p_id =
+                (SELECT p_id
+                 FROM donatedgoods
+                 WHERE id=%s);
+            """
+            computers_vals = tuple([getattr(self.entries,'pc_sn').get(),
+                                    self.lastDevice.table_keys.dg])
+            barcode_commands+=(UpdateSql(computers_command,computers_vals),)
+        if getattr(self.entries,'hd_sn').get() !=getattr(self.lastDevice,'hd_sn').get():
+            hds_command +="""
+            Update harddrives
+            SET hdsn = %s
+            WHERE hd_id =
+                (SELECT hd_id
+                 FROM donatedgoods
+                 WHERE id=%s);
+            """
+            computers_vals = tuple([getattr(self.entries,'hd_sn').get(),self.lastDevice.table_keys.dg])
+            barcode_commands+=(UpdateSql(computers_command,computers_vals),)
+        if getattr(self.entries,'asset_tag').get() !=getattr(self.lastDevice,'asset_tag').get():
+            dg_command +="""
+            Update donatedgoods
+            SET assettag = %s
+            WHERE id =%s;
+            """
+            dg_vals = tuple([getattr(self.entries,'asset_tag').get(),self.lastDevice.table_keys.dg])
+            barcode_commands+=(UpdateSql(dg_command,dg_vals),)
+        for sql in nonBarcode_Commands + barcode_commands:
+            out=self.insertToDB(sql.msg,*sql.args)
+            print(out)
 
+
+@dataclass(frozen=True)
+class UpdateSql:
+    msg : str = None
+    args : tuple[str] = field(default_factory=tuple)
 
 @dataclass(order=True,frozen=True)
 class NonBarcode_Vals:

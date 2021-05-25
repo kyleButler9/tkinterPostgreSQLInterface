@@ -46,9 +46,13 @@ class DBI:
                 cur.execute(sql,(*args,))
             else:
                 cur.execute(sql)
-            out=cur.fetchone()
-            cur.close()
-            self.conn.commit()
+            try:
+                out=cur.fetchone()
+            except:
+                out='success!'
+            finally:
+                cur.close()
+                self.conn.commit()
         except (Exception, psycopg2.DatabaseError) as error:
             print(error)
             print('\nretrying connection...')

@@ -535,7 +535,7 @@ class qc(tk.Frame,DBI):
             donationIDFromHDinfo= \
             """
             SELECT donation_id
-            FROM donategoods
+            FROM donatedgoods
             INNER JOIN harddrives hd USING (hd_id)
             WHERE {};
             """
@@ -644,32 +644,31 @@ class qc(tk.Frame,DBI):
         try:
             qualityControlLog = \
             """
-            CREATE TEMP TABLE ui(hd_id,qc_time,donation_id,staff_id);
-
+            DROP TABLE IF EXISTS ui;
+            CREATE TEMP TABLE ui(hd_id INTEGER,qc_time TIMESTAMP,donation_id INTEGER,staff_id INTEGER);
+            select * from ui;
             INSERT INTO ui(hd_id,qc_time,staff_id)
             VALUES(
-                %s,NOW(),(select staff_id from staff where name = %s)
-                  );
+                %s,
+                NOW(),
+                (select staff_id from staff where name = %s)
+                );
 
             UPDATE ui
             SET donation_id = (
-                SELECT donation_id
-                FROM donatedgoods
-                WHERE hd_id = (SELECT hd_id from ui)
+                SELECT g.donation_id
+                FROM donatedgoods g
+                WHERE g.hd_id = (SELECT hd_id from ui)
                               );
             INSERT INTO qualitycontrol(hd_id,qcDate,donation_id,staff_id)
-            VALUES(
-                (SELECT hd_id from ui),
-                (SELECT qc_time from ui),
-                (SELECT donation_id from ui),
-                (SELECT s.staff_id
-                FROM staff s
-                WHERE s.name = %s));
+            SELECT hd_id,qc_time, donation_id, staff_id
+            FROM ui;
             Update donations
             set numwiped = 1
             WHERE donation_id = (SELECT donation_id from ui);
             DROP TABLE ui;
             """
+            print(qualityControlLog % (self.hd_id,name))
             out=self.insertToDB(qualityControlLog,self.hd_id,name)
             self.err.set(out)
         except (Exception, psycopg2.DatabaseError) as error:
@@ -680,5 +679,5 @@ class qc(tk.Frame,DBI):
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Wiper Station")
-    app = ProcessedHardDrives(root,ini_section='appendage')
+    app = ProcessedHardDrives(root,ini_section='local_launcher')
     app.mainloop()

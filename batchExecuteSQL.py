@@ -101,7 +101,10 @@ class DBAdmin:
             sanitized Boolean,
             model VARCHAR(100),
             size VARCHAR(20),
-            wipedate Timestamp
+            wipedate Timestamp,
+            staff_id INTEGER,
+            FOREIGN KEY (staff_id)
+                REFERENCES staff (staff_id)
         )
         """, #note no unique constraint on hdsn
         """
@@ -111,7 +114,6 @@ class DBAdmin:
             quality_id INTEGER,
             type_id INTEGER not null,
             sn varchar(100),
-            intakeDate timestamp,
             FOREIGN KEY (quality_id) REFERENCES qualities (quality_id),
             FOREIGN KEY (type_id) REFERENCES devicetypes (type_id)
         )

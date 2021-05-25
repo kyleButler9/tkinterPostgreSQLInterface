@@ -40,7 +40,7 @@ class InvestigateLots(DonationBanner,DBI):
         SELECT count(DISTINCT hd_id),count(DISTINCT p_id)
         FROM donatedgoods
         WHERE donation_id = %s;
-        """ % (donationID)
+        """ % (donationID,)
         # getInfo = \
         # """
         # SELECT count(DISTINCT hd.hd_id),count(DISTINCT p.devicesn)
@@ -57,6 +57,7 @@ class InvestigateLots(DonationBanner,DBI):
         from donatedgoods g
         INNER JOIN harddrives hd USING (hd_id)
         where hd.destroyed=FALSE and hd.sanitized=FALSE
+        and hd.hdpid is not NULL
         and donation_id = %s
         group by donation_id;
         """ % (donationID,)
@@ -71,7 +72,7 @@ class InvestigateLots(DonationBanner,DBI):
         # group by donation_id;
         # """ % (donationID,)
         hmlRes=self.fetchone(queryPartiallyCompletedLot)
-        if len(hmlRes) !=0:
+        if hmlRes:
             self.how_many_HDs_left.set("Count Remaining: "+str(hmlRes[0]))
         else:
             self.how_many_HDs_left.set("Count Remaining: "+str(0))
@@ -79,6 +80,9 @@ class InvestigateLots(DonationBanner,DBI):
 
 class Report(DonationBanner,DBI):
     def __init__(self,parent,*args,**kwargs):
+        # note that optimally, g.hd_id is not null should be the proper query
+        # instead of hd.hdpid is not null as g.hd_id should be null if hd.hdpid is
+        # but in the current factoring it isnt
         self.ini_section = kwargs['ini_section']
         self.parent=parent
         DBI.__init__(self,ini_section = kwargs['ini_section'])
@@ -90,7 +94,7 @@ class Report(DonationBanner,DBI):
         from donatedgoods g
         INNER JOIN harddrives hd USING (hd_id)
         INNER JOIN donations d USING (donation_id)
-        where g.hd_id is not null and d.reported=FALSE
+        where hd.hdpid is not null and d.report=FALSE
         group by g.donation_id
         having bool_and(case when hd.destroyed = TRUE or hd.sanitized=TRUE THEN TRUE ELSE FALSE END) = TRUE)
 
@@ -132,7 +136,8 @@ class Report(DonationBanner,DBI):
         from donatedgoods g
         inner join donations d USING (donation_id)
         inner join harddrives hd USING (hd_id)
-        where hd.destroyed=FALSE and hd.sanitized=FALSE and d.reported=FALSE
+        where hd.destroyed=FALSE and hd.sanitized=FALSE
+        and hd.hdpid is not NULL and d.report=FALSE
         group by donation_id
         having count(hd_id) < %s
         and count(hd_id)>0)
@@ -271,12 +276,12 @@ class Report(DonationBanner,DBI):
     def devicesToTuple(self):
         deviceInfo = \
         """
-        SELECT dt.deviceType, c.deviceSN,
+        SELECT dt.deviceType, c.SN,
             CASE WHEN hd.hdsn is NULL and hd.hdpid is NULL THEN COALESCE(hd.hdsn,'')
                 WHEN hd.hdsn is NULL THEN COALESCE(hd.hdsn,'N/A')
                 ELSE hd.hdsn END,
             g.assetTag, hd.destroyed, hd.sanitized, s.nameabbrev,
-            CASE WHEN hd.hdpid is NULL THEN (SELECT nameabbrev FROM staff INNER JOIN computers USING (staff_id))
+            CASE WHEN hd.hdpid is NULL THEN (SELECT nameabbrev FROM staff INNER JOIN g USING (staff_id))
             ELSE (SELECT nameabbrev FROM staff INNER JOIN harddrives USING (staff_id))
             END AS nameabbrev,
             CASE WHEN hd.hdpid is NULL THEN TO_CHAR(g.entryDate,'MM/DD/YYYY HH24:MI')
@@ -352,7 +357,7 @@ class Report(DonationBanner,DBI):
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Report Generation Station")
-    app = Report(root,ini_section='appendage')
+    app = Report(root,ini_section='local_launcher')
     app.mainloop()
 
 # class GenerateReport(tk.Frame,DBI):
