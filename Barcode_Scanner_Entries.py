@@ -6,7 +6,7 @@ from datetime import datetime,timedelta
 from dataclasses import dataclass,field,fields
 import time
 
-THRESHOLD=100000
+THRESHOLD=100 #MAKE THRESHOLD SMALLER OR LARGER TO ADJUST BARCODE MODE 
 
 class Entry_Form(tk.Frame):
     def __init__(self,parent,ROW,Entry_Vals,*args,**kwargs):
@@ -36,15 +36,13 @@ class Entry_Form(tk.Frame):
                 string_var=None
                 string_var=tk.StringVar(parent)
                 setattr(self,key,string_var)
-        self._grid(ROW,switch)
-    def _grid(self,ROW,switch,LABEL_COLUMN=0,ENTRY_COLUMN=1):
         if switch != 'VARIABLES ONLY':
-            for key in self.EV_field_names:
-                tk.Label(self.parent,text=key.replace("_"," ")+":").grid(row=ROW,column=LABEL_COLUMN)
-                getattr(self,key).grid(row=ROW,column=ENTRY_COLUMN)
-                ROW+=1
-        else:
-            print('can\'t grid a VARIABLES ONLY generation.')
+            self._grid(ROW,switch)
+    def _grid(self,ROW,switch,LABEL_COLUMN=0,ENTRY_COLUMN=1):
+        for key in self.EV_field_names:
+            tk.Label(self.parent,text=key.replace("_"," ")+":").grid(row=ROW,column=LABEL_COLUMN)
+            getattr(self,key).grid(row=ROW,column=ENTRY_COLUMN)
+            ROW+=1
         return self
     def get_rowcount(self):
         return self.row_count

@@ -6,7 +6,6 @@ from donationBanner import *
 from dataclasses import dataclass,fields,field
 from collections import namedtuple
 from Barcode_Scanner_Entries import *
-from batchExecuteSQL import batchExecuteSqlCommands
 @dataclass(frozen=True)
 class Table_Keys:
     dg: str = None
@@ -191,7 +190,7 @@ class InsertDrives(tk.Frame,DBI):
         """
         DROP TABLE IF EXISTS user_inputs;
         CREATE TEMP TABLE user_inputs(
-            devicetype_id integer,
+            type_id integer,
             pc_sn VARCHAR(20),
             hd_sn VARCHAR(20),
             pc_id VARCHAR(20),
@@ -212,7 +211,7 @@ class InsertDrives(tk.Frame,DBI):
             hd_id,
             hd_sn,
             staff_id,
-            devicetype_id,
+            type_id,
             quality_id,
             intake_date
 	)
@@ -228,31 +227,90 @@ class InsertDrives(tk.Frame,DBI):
             (SELECT quality_id from qualities where quality = %s),
             NOW()
         );
-        with device_info as (
-            INSERT INTO computers(pid,sn,type_id,quality_id)
-                SELECT pc_id,pc_sn,devicetype_id, quality_id
-                    FROM user_inputs
-            ON CONFLICT (pid) DO UPDATE
-                SET quality_id = EXCLUDED.quality_id,
-                    type_id = EXCLUDED.type_id
-            RETURNING p_id as pc_table_id
-            ), harddrive_info as (
-            INSERT INTO harddrives(hdpid,hdsn)
-                SELECT hd_id,hd_sn
-                    FROM user_inputs
-            ON CONFLICT (hdpid) DO UPDATE
-                SET hdsn = harddrives.hdsn
-            RETURNING hd_id as hd_table_id
-            )
+        with device_info as ({}), harddrive_info as ({})
         UPDATE user_inputs
             SET pc_table_id = (select pc_table_id from device_info),
                 hd_table_id = (select hd_table_id from harddrive_info);
+        select pc_table_id,hd_table_id from user_inputs;
         INSERT INTO donatedgoods(donation_id,p_id,hd_id,intakedate,assettag,staff_id)
             SELECT donation_id,pc_table_id,hd_table_id,intake_date,asset_tag,staff_id
             FROM user_inputs
-        RETURNING id, p_id,hd_id,donation_id;
+        RETURNING id;
         """
-            #note that I'm leaving blank from the update the SN so that we can just scan the pid to add an additional HD
+        # UPDATE user_inputs
+        #          SET pc_table_id = (select pc_table_id from device_info),
+        #              hd_table_id = (select hd_table_id from harddrive_info);
+        #      INSERT INTO donatedgoods(donation_id,p_id,hd_id,intakedate,assettag,staff_id)
+        #          SELECT donation_id,pc_table_id,hd_table_id,intake_date,asset_tag,staff_id
+        #          FROM user_inputs
+        #      RETURNING id, p_id,hd_id,donation_id;
+    #     insertDevice = \
+    #     """
+    #     DROP TABLE IF EXISTS user_inputs;
+    #     CREATE TEMP TABLE user_inputs(
+    #         devicetype_id integer,
+    #         pc_sn VARCHAR(20),
+    #         hd_sn VARCHAR(20),
+    #         pc_id VARCHAR(20),
+    #         hd_id VARCHAR(20),
+    #         asset_tag VARCHAR(255),
+    #         quality_id integer,
+    #         staff_id integer,
+    #         intake_date timestamp,
+    #         donation_id integer,
+    #         pc_table_id INTEGER,
+    #         hd_table_id INTEGER
+    #         );
+    #     INSERT INTO user_inputs(
+    #         donation_id,
+    #         asset_tag,
+    #         pc_id,
+    #         pc_sn,
+    #         hd_id,
+    #         hd_sn,
+    #         staff_id,
+    #         devicetype_id,
+    #         quality_id,
+    #         intake_date
+	# )
+    #     VALUES (
+    #         %s,
+    #         %s,
+    #         TRIM(LOWER(%s)),
+    #         TRIM(LOWER(%s)),
+    #         TRIM(LOWER(%s)),
+    #         TRIM(LOWER(%s)),
+    #         (SELECT s.staff_id FROM staff s WHERE s.name =%s),
+    #         (SELECT dt.type_id FROM deviceTypes dt WHERE dt.deviceType = %s),
+    #         (SELECT quality_id from qualities where quality = %s),
+    #         NOW()
+    #     );
+    #     with device_info as (
+    #         INSERT INTO computers(pid,sn,type_id,quality_id)
+    #             SELECT pc_id,pc_sn,devicetype_id, quality_id
+    #                 FROM user_inputs
+    #         ON CONFLICT (pid) DO UPDATE
+    #             SET quality_id = EXCLUDED.quality_id,
+    #                 type_id = EXCLUDED.type_id
+    #         RETURNING p_id as pc_table_id
+    #         ), harddrive_info as (
+    #         INSERT INTO harddrives(hdpid,hdsn)
+    #             SELECT hd_id,hd_sn
+    #                 FROM user_inputs
+    #         ON CONFLICT (hdpid) DO UPDATE
+    #             SET hdsn = harddrives.hdsn
+    #         RETURNING hd_id as hd_table_id
+    #         )
+    #     UPDATE user_inputs
+    #         SET pc_table_id = (select pc_table_id from device_info),
+    #             hd_table_id = (select hd_table_id from harddrive_info);
+    #     INSERT INTO donatedgoods(donation_id,p_id,hd_id,intakedate,assettag,staff_id)
+    #         SELECT donation_id,pc_table_id,hd_table_id,intake_date,asset_tag,staff_id
+    #         FROM user_inputs
+    #     RETURNING id, p_id,hd_id,donation_id;
+    #     """
+            #note that I'm leaving blank from the update the SN
+            # so that we can just scan the pid to add an additional HD
             #also note that when there is a harddrive conflict
             #the hdsn isnt updated
         if submitted_form.pc_id is not None:
@@ -262,15 +320,17 @@ class InsertDrives(tk.Frame,DBI):
             computer_insert = \
             """
             INSERT INTO computers(pid,sn,type_id,quality_id)
-                SELECT pid,device_sn,devicetype_id, quality_id
+                SELECT pc_id,pc_sn,type_id, quality_id
                     FROM user_inputs
             ON CONFLICT (pid) DO UPDATE
-                SET quality_id = EXCLUDED.quality_id,
-                    type_id = EXCLUDED.type_id
-            RETURNING p_id
+                SET quality_id = computers.quality_id
+            RETURNING p_id as pc_table_id
             """
         else:
-            computer_insert = "SELECT NULL AS p_id"
+            #  the ::int casts the NULL value to an integer,
+            #  necessary to do, otherwise postgres tries to insert the string "null"
+            #  into an integer column and sends back a fail message
+            computer_insert = "SELECT NULL::int AS pc_table_id"
         if submitted_form.hd_id is not None:
             #recall that above we confirmed that
             #the hard drive serial number cannot be entered without a HD ID
@@ -278,24 +338,29 @@ class InsertDrives(tk.Frame,DBI):
             hd_insert = \
             """
             INSERT INTO harddrives(hdpid,hdsn)
-                SELECT hdpid,device_hdsn
+                SELECT hd_id,hd_sn
                     FROM user_inputs
             ON CONFLICT (hdpid) DO UPDATE
                 SET hdsn = harddrives.hdsn
-            RETURNING hd_id
+            RETURNING hd_id as hd_table_id
             """
         else:
-            hd_insert = "SELECT NULL as hd_id"
+            hd_insert = "SELECT NULL::int as hd_table_id"
         insert_device_sql = insertDevice.format(computer_insert,hd_insert)
         try:
             out=self.fetchone(insert_device_sql,*args)
-            self.lastDevice.table_keys = Table_Keys(*out)
-            self.conn.commit()
-            #note: next line is breaking.
-            self.update_last_device_log(out,submitted_form,submitted_headers)
-            self.clear_form()
-            self.entries.pc_id.focus()
-            self.err.set("success!")
+            try:
+                self.lastDevice.table_keys = Table_Keys(*out)
+                self.conn.commit()
+                #note: next line is breaking.
+                self.update_last_device_log(out,submitted_form,submitted_headers)
+                self.clear_form()
+                self.entries.pc_id.focus()
+                self.err.set("success!")
+            except:
+                self.err.set('That PC ID or HD ID entered has been entered before. Try another.')
+            finally:
+                pass
         except (Exception, psycopg2.DatabaseError) as error:
             self.err.set(error)
             print(error)
@@ -343,40 +408,56 @@ class Review(InsertDrives):
         self.qualityName.set(self.lastDevice_nonBarCode.quality_name.get())
         #getattr(self.entries,key).insert(0,getattr(self.lastDevice_nonBarCode,key).get())
         return self
-    def InsertDrives(self,event):
+    def insertDevice(self,event):
+        nonBarcode_Commands=tuple()
+
         donatedgoods_vals = tuple()
         donatedgoods_command=str()
         donatedgoods_command += "Update donatedgoods "
         idChange=False
+        isChanged=False
         if self.donationID.get() != self.lastDevice_nonBarCode.donation_id.get():
+            isChanged=True
             donatedgoods_command += "SET donation_id= %s "
             donatedgoods_vals+= (self.donationID.get(),)
             idChange=True
         if self.staffName.get() != self.lastDevice_nonBarCode.staff_name.get():
+            isChanged=True
             if idChange:
                 donatedgoods_command+=', '
-            donatedgoods_command += "SET staff_id=(SELECT staff_id from staff where name = %s) "
+            else:
+                donatedgoods_command+='SET '
+            donatedgoods_command += "staff_id=(SELECT staff_id from staff where name = %s) "
             donatedgoods_vals+= (self.staffName.get(),)
-        donatedgoods_command+="Where dg_id=%s" + ';'
+        donatedgoods_command+="Where id=%s" + ';'
         donatedgoods_vals +=(self.lastDevice.table_keys.dg,)
-        donatedgoods = UpdateSql(donatedgoods_command,donatedgoods_vals)
+        donatedgoods_sql = UpdateSql(donatedgoods_command,donatedgoods_vals)
+        if isChanged:
+            nonBarcode_Commands+=(donatedgoods_sql,)
+            isChanged=False
         computers_vals=tuple()
         computers_command=str()
         computers_command+="UPDATE computers "
         typeChange=False
         if self.typeName.get() != self.lastDevice_nonBarCode.type_name.get():
+            isChanged=True
             computers_command += "SET type_id=(SELECT type_id from devicetypes where devicetype = %s)"
             computers_vals+=(self.typeName.get(),)
             typeChange=True
         if self.qualityName.get() != self.lastDevice_nonBarCode.quality_name.get():
+            isChanged=True
             if typeChange:
-                sql_commands+=', '
-            sql_commands += "SET quality_id=(SELECT quality_id from qualities where quality = %s)" + ' '
+                computers_command+=', '
+            else:
+                computers_command+='SET '
+            computers_command += "quality_id=(SELECT quality_id from qualities where quality = %s)" + ' '
             computers_vals+=(self.qualityName.get(),)
-        computers_command+="WHERE p_id=(SELECT p_id from donatedgoods where dg_id = %s);"
+        computers_command+="WHERE p_id=(SELECT p_id from donatedgoods where id = %s);"
         computers_vals +=(self.lastDevice.table_keys.dg,)
-        computers = UpdateSql(computers_command,computers_vals)
-        nonBarcode_Commands =tuple(donatedgoods,computers,)
+        if isChanged:
+            isChanged=False
+            nonBarcode_Commands +=(UpdateSql(computers_command,computers_vals),)
+
         barcode_commands=tuple()
         if getattr(self.entries,'pc_sn').get() !=getattr(self.lastDevice,'pc_sn').get():
             computers_command ="""
@@ -391,7 +472,7 @@ class Review(InsertDrives):
                                     self.lastDevice.table_keys.dg])
             barcode_commands+=(UpdateSql(computers_command,computers_vals),)
         if getattr(self.entries,'hd_sn').get() !=getattr(self.lastDevice,'hd_sn').get():
-            hds_command +="""
+            hds_command ="""
             Update harddrives
             SET hdsn = %s
             WHERE hd_id =
@@ -399,8 +480,8 @@ class Review(InsertDrives):
                  FROM donatedgoods
                  WHERE id=%s);
             """
-            computers_vals = tuple([getattr(self.entries,'hd_sn').get(),self.lastDevice.table_keys.dg])
-            barcode_commands+=(UpdateSql(computers_command,computers_vals),)
+            hd_vals = tuple([getattr(self.entries,'hd_sn').get(),self.lastDevice.table_keys.dg])
+            barcode_commands+=(UpdateSql(hds_command,hd_vals),)
         if getattr(self.entries,'asset_tag').get() !=getattr(self.lastDevice,'asset_tag').get():
             dg_command +="""
             Update donatedgoods

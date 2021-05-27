@@ -9,7 +9,6 @@ from donationBanner import *
 
 class InvestigateLots(DonationBanner,DBI):
     def __init__(self,parent,*args,**kwargs):
-        #DonationBanner.__init__(self,parent,ini_section=kwargs['ini_section'])
         self.donationIDVar=kwargs['donationID']
         DBI.__init__(self,ini_section = kwargs['ini_section'])
         self.getInfoButton = tk.Button(parent,
@@ -38,29 +37,29 @@ class InvestigateLots(DonationBanner,DBI):
         getInfo = \
         """
         SELECT count(DISTINCT hd_id),count(DISTINCT p_id)
-        FROM donatedgoods
+        FROM beta.donatedgoods
         WHERE donation_id = %s;
-        """ % (donationID,)
+        """ #% (donationID,)
         # getInfo = \
         # """
         # SELECT count(DISTINCT hd.hd_id),count(DISTINCT p.devicesn)
         # FROM processing p INNER JOIN harddrives hd using (hd_id)
         # WHERE p.donation_id = %s;
         # """ % (donationID)
-        res = self.fetchone(getInfo)
+        res = self.fetchone(getInfo,donationID)
         msg=dict()
         self.num_HDSN.set("Hard Drive Count: " + str(res[0]))
         self.num_SN.set("Device Count: "+str(res[1]))
         queryPartiallyCompletedLot = \
         """
         SELECT count(g.hd_id) as howmanyleft
-        from donatedgoods g
-        INNER JOIN harddrives hd USING (hd_id)
+        from beta.donatedgoods g
+        INNER JOIN beta.harddrives hd USING (hd_id)
         where hd.destroyed=FALSE and hd.sanitized=FALSE
         and hd.hdpid is not NULL
         and donation_id = %s
         group by donation_id;
-        """ % (donationID,)
+        """# % (donationID,)
         # queryPartiallyCompletedLot = \
         # """
         # SELECT count(hd_id) as howmanyleft
@@ -71,7 +70,7 @@ class InvestigateLots(DonationBanner,DBI):
         # and donation_id = %s
         # group by donation_id;
         # """ % (donationID,)
-        hmlRes=self.fetchone(queryPartiallyCompletedLot)
+        hmlRes=self.fetchone(queryPartiallyCompletedLot,donationID)
         if hmlRes:
             self.how_many_HDs_left.set("Count Remaining: "+str(hmlRes[0]))
         else:
@@ -91,17 +90,17 @@ class Report(DonationBanner,DBI):
         with completedlots as
         (select g.donation_id,
         bool_and(case when hd.destroyed = TRUE or hd.sanitized=TRUE THEN TRUE ELSE FALSE END)
-        from donatedgoods g
-        INNER JOIN harddrives hd USING (hd_id)
-        INNER JOIN donations d USING (donation_id)
+        from beta.donatedgoods g
+        INNER JOIN beta.harddrives hd USING (hd_id)
+        INNER JOIN beta.donations d USING (donation_id)
         where hd.hdpid is not null and d.report=FALSE
         group by g.donation_id
         having bool_and(case when hd.destroyed = TRUE or hd.sanitized=TRUE THEN TRUE ELSE FALSE END) = TRUE)
 
         select donors.name, donations.lotnumber
         from completedlots
-        INNER JOIN donations on completedlots.donation_id=donations.donation_id
-        INNER JOIN donors USING(donor_id)
+        INNER JOIN beta.donations on completedlots.donation_id=donations.donation_id
+        INNER JOIN beta.donors USING(donor_id)
         order by lotnumber ASC;
         """
         # queryCompletedLots = \
@@ -125,17 +124,24 @@ class Report(DonationBanner,DBI):
         # """
         tk.Label(parent,text='Completed Lots:').pack()
         completedLots = self.fetchall(queryCompletedLots)
-        completedLots_descriptors = [str(' | ').join(lot_info) for lot_info in completedLots]
-
+        #completedLots_descriptors = [str(' | ').join(str(lot_info)) for lot_info in completedLots]
+        completedLots_descriptors =list()
+        for lot in completedLots:
+            lotdesc = str()
+            for lotDescriptor in lot:
+                lotdesc+=str(lotDescriptor)
+                if lotDescriptor !=lot[-1]:
+                    lotdesc += ' | '
+            completedLots_descriptors.append(lotdesc)
         self.lotvar = tk.StringVar(parent,value="donor name | lotnumber")
         self.clotsDD = tk.OptionMenu(parent,self.lotvar,"donor name | lotnumber",*completedLots_descriptors)
         self.clotsDD.pack()
         queryPartiallyCompletedLots = \
         """
         with PartiallyCompletedLots as (select donation_id, count(g.hd_id) as howmanyleft
-        from donatedgoods g
-        inner join donations d USING (donation_id)
-        inner join harddrives hd USING (hd_id)
+        from beta.donatedgoods g
+        inner join beta.donations d USING (donation_id)
+        inner join beta.harddrives hd USING (hd_id)
         where hd.destroyed=FALSE and hd.sanitized=FALSE
         and hd.hdpid is not NULL and d.report=FALSE
         group by donation_id
@@ -144,8 +150,8 @@ class Report(DonationBanner,DBI):
 
         select donors.name,lotnumber, howmanyleft
         from PartiallyCompletedLots
-        inner join donations using (donation_id)
-        inner join donors using (donor_id)
+        inner join beta.donations using (donation_id)
+        inner join beta.donors using (donor_id)
         order by lotnumber;
         """
         # queryPartiallyCompletedLots = \
@@ -170,15 +176,15 @@ class Report(DonationBanner,DBI):
         maxEntry=tk.Entry(parent,width=5,textvariable=self.maximum)
         maxEntry.pack()
         partialLots = self.fetchall(queryPartiallyCompletedLots % (self.maximum.get(),))
-        partialLots_descriptors = [str(' | ').join(lot_info) for lot_info in partialLots]
-        # pclots =list()
-        # for lot in partialLots:
-        #     lotdesc = str()
-        #     for lotDescriptor in lot:
-        #         lotdesc+=str(lotDescriptor)
-        #         if lotDescriptor !=lot[-1]:
-        #             lotdesc += ' | '
-        #     pclots.append(lotdesc)
+        #partialLots_descriptors = [str(' | ').join() for lot_info in partialLots]
+        partialLots_descriptors =list()
+        for lot in partialLots:
+            lotdesc = str()
+            for lotDescriptor in lot:
+                lotdesc+=str(lotDescriptor)
+                if lotDescriptor !=lot[-1]:
+                    lotdesc += ' | '
+            partialLots_descriptors.append(lotdesc)
 
         self.plotvar = tk.StringVar(parent,value="donor name | lotnumber | how many left")
         self.pclotsDD = tk.OptionMenu(parent,self.plotvar,"donor name | lotnumber | how many left",*partialLots_descriptors)
@@ -224,14 +230,14 @@ class Report(DonationBanner,DBI):
         markReportedSQL = \
         """
         WITH reportgen as (
-        UPDATE donations
-        SET reported = TRUE
+        UPDATE beta.donations
+        SET report = TRUE
         WHERE donation_id = %s
         RETURNING donation_id
         )
         SELECT donors.name, donations.lotnumber
-        FROM donors
-        INNER JOIN donations USING (donor_id)
+        FROM beta.donors
+        INNER JOIN beta.donations USING (donor_id)
         WHERE donation_id =
             (select donation_id from reportgen);
         """
@@ -255,8 +261,8 @@ class Report(DonationBanner,DBI):
         donationInfo = \
             """
             SELECT d.name, don.dateReceived, don.lotNumber
-            FROM donors d
-            INNER JOIN donations don USING (donor_id)
+            FROM beta.donors d
+            INNER JOIN beta.donations don USING (donor_id)
             WHERE donation_id = %s;
             """
         self.donationInfo=self.fetchone(donationInfo,self.donationID)
@@ -264,7 +270,10 @@ class Report(DonationBanner,DBI):
         qcdevices=self.qcDevicesToTuple()
         devicesFilePath=self.TupleToTabDelimitedReport('',devices)
         qcFilePath=self.TupleToTabDelimitedReport('QC',qcdevices)
-        procs = []
+        report_csv=self.TupleToCommaDelimitedReport('',devices)
+        report_qc_csv=self.TupleToCommaDelimitedReport('QC',qcdevices)
+        # consider using something similar to the below to open the reports in seperate processes
+        # procs = []
         # for outfile in [devicesFilePath,qcFilePath]:
         #     proc = Process(target=os.system,args=('notepad {}'.format(outfile),))
         #     procs.append(proc)
@@ -274,25 +283,40 @@ class Report(DonationBanner,DBI):
         self.err.set('Files successfully saved in your Downloads folder.')
         return self
     def devicesToTuple(self):
+        # deviceInfo = \
+        # """
+        # SELECT dt.deviceType, c.SN,
+        #     CASE WHEN hd.hdsn is NULL and hd.hdpid is NULL THEN COALESCE(hd.hdsn,'')
+        #         WHEN hd.hdsn is NULL THEN COALESCE(hd.hdsn,'N/A')
+        #         ELSE hd.hdsn END,
+        #     g.assetTag, hd.destroyed, hd.sanitized,COALESCE(s1.nameabbrev,s2.nameabbrev),
+        #     CASE WHEN (hd.sanitized=FALSE and hd.destroyed=FALSE) THEN TO_CHAR(g.intakeDate,'MM/DD/YYYY HH24:MI')
+        #     ELSE TO_CHAR(hd.wipeDate,'MM/DD/YYYY HH24:MI')
+        #     END AS date
+        # FROM donatedgoods g
+        # LEFT OUTER JOIN computers c on g.p_id = c.p_id
+        # LEFT OUTER JOIN harddrives hd on g.hd_id = hd.hd_id
+        # INNER JOIN deviceTypes dt USING (type_id)
+        # INNER JOIN staff s1 on hd.staff_id = s1.staff_id
+        # INNER JOIN staff s2 on g.staff_id=s2.staff_id
+        # WHERE g.donation_id = %s
+        # ORDER BY g.intakeDate;
+        # """
         deviceInfo = \
         """
         SELECT dt.deviceType, c.SN,
             CASE WHEN hd.hdsn is NULL and hd.hdpid is NULL THEN COALESCE(hd.hdsn,'')
                 WHEN hd.hdsn is NULL THEN COALESCE(hd.hdsn,'N/A')
                 ELSE hd.hdsn END,
-            g.assetTag, hd.destroyed, hd.sanitized, s.nameabbrev,
-            CASE WHEN hd.hdpid is NULL THEN (SELECT nameabbrev FROM staff INNER JOIN g USING (staff_id))
-            ELSE (SELECT nameabbrev FROM staff INNER JOIN harddrives USING (staff_id))
-            END AS nameabbrev,
-            CASE WHEN hd.hdpid is NULL THEN TO_CHAR(g.entryDate,'MM/DD/YYYY HH24:MI')
-            ELSE TO_CHAR(hd.wipeDate,'MM/DD/YYYY HH24:MI')
-            END AS date
-        FROM donatedgoods g
-        INNER JOIN computers c USING (p_id)
-        INNER JOIN harddrives hd USING (hd_id)
-        INNER JOIN deviceTypes dt USING (type_id)
-        WHERE p.donation_id = %s
-        ORDER BY p.entryDate;
+            COALESCE(g.assetTag,'') as asset_tag, COALESCE(hd.destroyed,FALSE) as destroyed, COALESCE(hd.sanitized,FALSE) as sanitized,
+            (select nameabbrev from beta.staff where staff_id=COALESCE(hd.staff_id,g.staff_id)),
+            COALESCE(TO_CHAR(hd.wipeDate,'MM/DD/YYYY HH24:MI'),TO_CHAR(g.intakeDate,'MM/DD/YYYY HH24:MI')) as date
+        FROM beta.donatedgoods g
+        LEFT OUTER JOIN beta.computers c on g.p_id = c.p_id
+        INNER JOIN beta.deviceTypes dt USING (type_id)
+        LEFT OUTER JOIN beta.harddrives hd on g.hd_id = hd.hd_id
+        WHERE g.donation_id = %s
+        ORDER BY g.intakeDate;
         """
         # deviceInfo = \
         # """
@@ -322,10 +346,10 @@ class Report(DonationBanner,DBI):
         qcInfo = \
         """
         SELECT hd.hdsn, TO_CHAR(qc.qcDate,'MM/DD/YYYY'),s.nameabbrev
-        FROM qualitycontrol qc
-        INNER JOIN staff s USING (staff_id)
-        INNER JOIN harddrives hd USING (hd_id)
-        INNER JOIN donatedgoods g USING (hd_id)
+        FROM beta.qualitycontrol qc
+        INNER JOIN beta.staff s USING (staff_id)
+        INNER JOIN beta.harddrives hd USING (hd_id)
+        INNER JOIN beta.donatedgoods g USING (hd_id)
         WHERE g.donation_id = %s;
         """
         devices = self.fetchall(qcInfo,self.donationID)
@@ -349,6 +373,17 @@ class Report(DonationBanner,DBI):
             outfile.write('\n')
         outfile.close()
         return filepath
+    def TupleToCommaDelimitedReport(self,appendage,devicesTuple):
+        downloadsFolder = join(Path.home(),'Downloads')
+        fileName = '%s - %s - %s.csv' % (self.donationInfo[2],self.donationInfo[0],str(appendage))
+        filepath = join(downloadsFolder,fileName)
+        outfile = open(filepath,"w")
+        for row in devicesTuple:
+            for col in row:
+                outfile.write(str(col) + ',')
+            outfile.write('\n')
+        outfile.close()
+        return filepath
     def lookIntoLots(self,event):
         pop_up = tk.Toplevel(self.parent)
         pop_up.title('Lots info')
@@ -357,7 +392,7 @@ class Report(DonationBanner,DBI):
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Report Generation Station")
-    app = Report(root,ini_section='local_launcher')
+    app = Report(root,ini_section='appendage')
     app.mainloop()
 
 # class GenerateReport(tk.Frame,DBI):

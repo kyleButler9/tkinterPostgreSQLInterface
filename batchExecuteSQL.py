@@ -26,7 +26,10 @@ def batchExecuteSqlCommands(ini_section,commands=TEST_COMMAND):
 class DBAdmin:
     createTableCommands = (
         """
-        CREATE TABLE recipients (
+        CREATE SCHEMA beta;
+        """,
+        """
+        CREATE TABLE beta.recipients (
             recipient_id SERIAL PRIMARY KEY,
             complete Boolean,
             name VARCHAR(255),
@@ -35,14 +38,14 @@ class DBAdmin:
         )
         """,
         """
-        CREATE TABLE donors(
+        CREATE TABLE beta.donors(
             donor_id SERIAL PRIMARY KEY,
             name VARCHAR(255) UNIQUE,
             address VARCHAR(255)
         )
         """,
         """
-        CREATE TABLE donations (
+        CREATE TABLE beta.donations (
             donation_id SERIAL PRIMARY KEY,
             donor_id INTEGER NOT NULL,
             lotNumber bigint UNIQUE,
@@ -51,40 +54,44 @@ class DBAdmin:
             numwiped INTEGER DEFAULT 0,
             report Boolean DEFAULT FALSE,
             FOREIGN KEY (donor_id)
-                REFERENCES donors (donor_id)
+                REFERENCES beta.donors (donor_id)
         )
         """,
         """
-        CREATE TABLE licenses (
+        CREATE TABLE beta.licenses (
             license_id SERIAL PRIMARY KEY,
             serialNumber VARCHAR(100),
-            productKey VARCHAR(100)
+            productKey VARCHAR(100),
+            entry_time timestamp,
+            staff_id INTEGER,
+            FOREIGN KEY (staff_id)
+                REFERENCES beta.staff (staff_id)
         )
         """,
         """
-        CREATE TABLE pallets (
+        CREATE TABLE beta.pallets (
             pallet_id SERIAL PRIMARY KEY,
             pallet INTEGER,
             recipient_id INTEGER NOT NULL,
             FOREIGN KEY (recipient_id)
-                REFERENCES recipients (recipient_id)
+                REFERENCES beta.recipients (recipient_id)
                 ON UPDATE CASCADE ON DELETE CASCADE
         )
         """,
         """
-        CREATE TABLE qualities (
+        CREATE TABLE beta.qualities (
             quality_id SERIAL PRIMARY KEY,
             quality VARCHAR(15)
         )
         """,
         """
-        CREATE TABLE deviceTypes (
+        CREATE TABLE beta.deviceTypes (
             type_id SERIAL PRIMARY KEY,
             deviceType VARCHAR(15)
         )
         """,
         """
-        CREATE TABLE staff (
+        CREATE TABLE beta.staff (
             staff_id SERIAL PRIMARY KEY,
             name VARCHAR(255) UNIQUE,
             password VARCHAR(100),
@@ -93,192 +100,194 @@ class DBAdmin:
         )
         """,
         """
-        CREATE TABLE harddrives(
+        CREATE TABLE beta.harddrives(
             hd_id SERIAL PRIMARY KEY,
             hdpid VARCHAR(25) UNIQUE NOT NULL,
             hdsn VARCHAR(100),
-            destroyed Boolean,
-            sanitized Boolean,
+            destroyed Boolean default FALSE,
+            sanitized Boolean default FALSE,
             model VARCHAR(100),
             size VARCHAR(20),
             wipedate Timestamp,
             staff_id INTEGER,
+            license_id INTEGER,
             FOREIGN KEY (staff_id)
-                REFERENCES staff (staff_id)
+                REFERENCES beta.staff (staff_id),
+            FOREIGN KEY (license_id)
+                REFERENCES beta.licenses (license_id)
         )
         """, #note no unique constraint on hdsn
         """
-        create table computers(
-            p_id SERIAL PRIMARY KEY,
+        create table beta.computers(
+            pc_id SERIAL PRIMARY KEY,
             pid VARCHAR(20) UNIQUE,
             quality_id INTEGER,
             type_id INTEGER not null,
             sn varchar(100),
-            FOREIGN KEY (quality_id) REFERENCES qualities (quality_id),
-            FOREIGN KEY (type_id) REFERENCES devicetypes (type_id)
+            FOREIGN KEY (quality_id) REFERENCES beta.qualities (quality_id),
+            FOREIGN KEY (type_id) REFERENCES beta.devicetypes (type_id)
         )
         """, #note that there isn't a unique constraint on device sn but there is on the pid
         """
-        create table donatedgoods(
+        create table beta.donatedgoods(
             id SERIAL PRIMARY KEY,
             donation_id INTEGER NOT NULL,
-            p_id INTEGER,
+            pc_id INTEGER,
             hd_id INTEGER UNIQUE,
             staff_id INTEGER NOT NULL,
             intakedate timestamp NOT NULL,
             assettag VARCHAR(255),
-            FOREIGN KEY (p_id) REFERENCES computers (p_id),
-            FOREIGN KEY (hd_id) REFERENCES harddrives (hd_id),
-            FOREIGN KEY (staff_id) REFERENCES staff (staff_id)
+            FOREIGN KEY (pc_id) REFERENCES beta.computers (pc_id),
+            FOREIGN KEY (hd_id) REFERENCES beta.harddrives (hd_id),
+            FOREIGN KEY (staff_id) REFERENCES beta.staff (staff_id)
         )
         """,
         """
-        CREATE TABLE qualitycontrol(
+        CREATE TABLE beta.qualitycontrol(
             qc_id SERIAL PRIMARY KEY,
             hd_id INTEGER,
             staff_id INTEGER,
             qcDate timestamp,
             donation_id INTEGER,
             FOREIGN KEY (staff_id)
-                REFERENCES staff (staff_id),
+                REFERENCES beta.staff (staff_id),
             FOREIGN KEY (donation_id)
-                REFERENCES donations (donation_id),
+                REFERENCES beta.donations (donation_id),
             FOREIGN KEY (hd_id)
-                REFERENCES harddrives (hd_id)
+                REFERENCES beta.harddrives (hd_id)
         )
         """,
         """
-        CREATE TABLE missingparts(
+        CREATE TABLE beta.missingparts(
             mp_id SERIAL PRIMARY KEY,
             quality VARCHAR(20),
             resolved Boolean,
             issue VARCHAR(255),
             notes VARCHAR(255),
-            p_id INTEGER,
+            pc_id INTEGER,
             pallet VARCHAR(20),
-            FOREIGN KEY (p_id)
-                REFERENCES computers (p_id)
+            FOREIGN KEY (pc_id)
+                REFERENCES beta.computers (pc_id)
         )
         """,
         """
-        CREATE TABLE refurbishedDevices(
-            device_id SERIAL PRIMARY KEY,
-            p_id INTEGER,
-            hd_id INTEGER,
-            license_id INTEGER,
-            FOREIGN KEY (p_id)
-                REFERENCES computers (p_id),
-            FOREIGN KEY (hd_id)
-                REFERENCES harddrives (hd_id),
-            FOREIGN KEY (license_id)
-                REFERENCES licenses (license_id)
-        )
-        """,
-        """
-        CREATE TABLE internet (
+        CREATE TABLE beta.internet (
             internet_id SERIAL PRIMARY KEY,
             hotspot_meid VARCHAR(25)
         )
         """,
-
         """
-        CREATE TABLE distributedDevices (
+        CREATE TABLE beta.refurbishedDevices(
+            device_id SERIAL PRIMARY KEY,
+            pc_id INTEGER,
+            hd_id INTEGER,
+            internet_id INTEGER,
+            FOREIGN KEY (pc_id)
+                REFERENCES beta.computers (pc_id),
+            FOREIGN KEY (hd_id)
+                REFERENCES beta.harddrives (hd_id),
+            FOREIGN KEY (internet_id)
+                REFERENCES beta.internet (internet_id)
+        )
+        """,
+        """
+        CREATE TABLE beta.distributedDevices (
             distdev_id SERIAL PRIMARY KEY,
             internet_id INTEGER,
             device_id INTEGER,
             recipient_id INTEGER NOT NULL,
             pallet_id INTEGER,
             FOREIGN KEY (internet_id)
-                REFERENCES internet (internet_id),
+                REFERENCES beta.internet (internet_id),
             FOREIGN KEY (device_id)
-                REFERENCES refurbishedDevices (device_id),
+                REFERENCES beta.refurbishedDevices (device_id),
             FOREIGN KEY (recipient_id)
-                REFERENCES recipients (recipient_id),
+                REFERENCES beta.recipients (recipient_id),
             FOREIGN KEY (pallet_id)
-                REFERENCES pallets (pallet_id)
+                REFERENCES beta.pallets (pallet_id)
         )
         """,
     )
 
     initializeDatabaseCommands = (
         """
-        INSERT INTO qualities(quality)
+        INSERT INTO beta.qualities(quality)
         VALUES('Fair'),('Good'),('Better'),('Best');
         """,
         """
-        INSERT INTO deviceTypes(deviceType)
+        INSERT INTO beta.deviceTypes(deviceType)
         VALUES('Laptop'),('Desktop'),('Loose HD'),('Unknown');
         """,
         """
-        INSERT INTO donors(name)
+        INSERT INTO beta.donors(name)
         VALUES('Individual Donor');
         """,
         """
-        INSERT INTO donations(datereceived,donor_id,lotNumber)
+        INSERT INTO beta.donations(datereceived,donor_id,lotNumber)
         VALUES('12/25/2020',
             (SELECT donor_id
-            FROM donors
+            FROM beta.donors
             WHERE name = 'Individual Donor'),0)
         """,
         """
-        INSERT INTO staff(name,active,nameabbrev)
+        INSERT INTO beta.staff(name,active,nameabbrev)
         VALUES('Kyle Butler',TRUE,'kbutler');
         """,
         """
-        ALTER TABLE donatedgoods add UNIQUE (p_id,hd_id)
+        ALTER TABLE beta.donatedgoods add UNIQUE (pc_id,hd_id)
         """,
     )
     dropTablesCommands = (
     """
-    DROP TABLE if exists qualitycontrol;
+    DROP TABLE if exists beta.qualitycontrol;
     """,
     """
-    DROP TABLE IF EXISTS donatedgoods;
+    DROP TABLE IF EXISTS beta.donatedgoods;
     """,
     """
-    DROP TABLE if exists donations;
+    DROP TABLE if exists beta.donations;
     """,
     """
-    DROP TABLE if exists donors;
+    DROP TABLE if exists beta.donors;
     """,
     """
-    DROP TABLE if exists distributedDevices;
+    DROP TABLE if exists beta.distributedDevices;
     """,
     """
-    DROP TABLE IF EXISTS refurbishedDevices;
+    DROP TABLE IF EXISTS beta.refurbishedDevices;
     """,
     """
-    DROP table if exists missingparts;
+    DROP table if exists beta.missingparts;
     """,
     """
-    DROP TABLE IF EXISTS computers;
+    DROP TABLE IF EXISTS beta.computers;
     """,
     """
-    DROP TABLE if exists qualities;
+    DROP TABLE if exists beta.qualities;
     """,
     """
-    DROP TABLE if exists devicetypes;
+    DROP TABLE if exists beta.devicetypes;
     """,
     """
-    DROP TABLE IF EXISTS harddrives;
+    DROP TABLE IF EXISTS beta.harddrives;
     """,
     """
-    DROP TABLE if exists staff;
+    DROP TABLE if exists beta.staff;
     """,
     """
-    DROP TABLE if exists licenses;
+    DROP TABLE if exists beta.licenses;
     """,
     """
-    DROP TABLE IF EXISTS internet;
+    DROP TABLE IF EXISTS beta.internet;
     """,
     """
-    DROP TABLE if exists pallets;
+    DROP TABLE if exists beta.pallets;
     """,
     """
-    DROP TABLE if exists recipients;
+    DROP TABLE if exists beta.recipients;
     """,
     )
 if __name__ == '__main__':
-    batchExecuteSqlCommands('local_launcher',commands=DBAdmin.dropTablesCommands)
-    batchExecuteSqlCommands('local_launcher',commands=DBAdmin.createTableCommands)
-    batchExecuteSqlCommands('local_launcher',commands=DBAdmin.initializeDatabaseCommands)
+    #batchExecuteSqlCommands('local_launcher',commands=DBAdmin.dropTablesCommands)
+    batchExecuteSqlCommands('appendage',commands=DBAdmin.createTableCommands)
+    batchExecuteSqlCommands('appendage',commands=DBAdmin.initializeDatabaseCommands)
