@@ -6,6 +6,10 @@ import re
 from sql import *
 from config import DBI
 
+# improvements include:
+# creating dropdowns of common issues.
+# such as missing RAM.
+
 class InsertLog(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent,*args)
@@ -49,7 +53,20 @@ class InsertLog(tk.Frame,DBI):
         log = self.log.get()
         notes = self.notes.get('1.0',tk.END)
         pallet = self.pallet.get()
-        back = self.fetchone(testStation.insertLog,quality,False,
+        insertLog = \
+        """
+        INSERT INTO beta.missingparts(quality,
+            resolved,
+            issue,
+            notes,
+            device_id,
+            pallet)
+        VALUES(%s,%s,%s,%s,(SELECT pc_id
+                            FROM beta.computers
+                            WHERE pid LIKE LOWER(%s)),%s)
+        RETURNING mp_id,device_id;
+        """
+        back = self.fetchone(insertLog,quality,False,
                             log,notes,pid,pallet)
         bool = True
         if back == None:
@@ -101,23 +118,44 @@ class AssociatePidAndLicense(tk.Frame,DBI):
         quality = self.qualityName.get()
         sn = self.sn.get()
         pid = self.pid.get()
+        back=None
         if quality != "quality:":
-            sql = testStation.licenseToPid_QualityIncluded
-            self.cur.execute(sql,(sn,quality,pid,))
+            licenseToPid_QualityIncluded = \
+            """
+            UPDATE beta.computers c
+            SET license_id = (SELECT license_id
+                                FROM licenses
+                                WHERE serialNumber=%s),
+                quality_id = (SELECT quality_id
+                                FROM qualities q
+                                WHERE q.quality = %s)
+            WHERE c.pid = %s
+            RETURNING pc_id,license_id;
+            """
+            back=self.fetchone(licenseToPid_QualityIncluded,sn,quality,pid)
         else:
-            sql = testStation.licenseToPid
-            self.cur.execute(sql,(sn,pid,))
-        back = self.cur.fetchone()
+            licenseToPid = \
+            """
+            UPDATE beta.computers c
+            SET license_id = (SELECT license_id
+                                FROM licenses
+                                WHERE serialNumber=%s)
+            WHERE pid = %s
+            RETURNING pc_id,license_id;
+            """
+            back=self.fetchone(licenseToPid,sn,pid)
         bool = True
         if back == None:
             bool = False
-            err = 'pid not registered'
+            err = 'most likely error is that the pid is not registered'
         else:
             for id in back:
                 if id == None:
                     bool = False
-                    err = 'license serial number not registered'
+                    err = 'most likely error is license serial number not registered'
         if bool == True:
+            # updates take no effect until we commit them here.
+            # note that the DBI method insertToDB(sql,*args) has a commit in it
             self.conn.commit()
             self.err.set('success!')
             self.pid.delete(0,'end')

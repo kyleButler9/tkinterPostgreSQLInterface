@@ -1,6 +1,10 @@
 import psycopg2
 from config import config
 
+# improvements include:
+#   creating a variable to hold "beta" so that schema of different names
+#   can easily be deployed
+
 TEST_COMMAND = ('SELECT 1',)
 def batchExecuteSqlCommands(ini_section,commands=TEST_COMMAND):
     conn = None
@@ -35,14 +39,14 @@ class DBAdmin:
             name VARCHAR(255),
             address VARCHAR(255),
             notes VARCHAR(255)
-        )
+        );
         """,
         """
         CREATE TABLE beta.donors(
             donor_id SERIAL PRIMARY KEY,
             name VARCHAR(255) UNIQUE,
             address VARCHAR(255)
-        )
+        );
         """,
         """
         CREATE TABLE beta.donations (
@@ -55,7 +59,16 @@ class DBAdmin:
             report Boolean DEFAULT FALSE,
             FOREIGN KEY (donor_id)
                 REFERENCES beta.donors (donor_id)
-        )
+        );
+        """,
+        """
+        CREATE TABLE beta.staff (
+            staff_id SERIAL PRIMARY KEY,
+            name VARCHAR(255) UNIQUE,
+            password VARCHAR(100),
+            active Boolean,
+            nameabbrev VARCHAR(100)
+        );
         """,
         """
         CREATE TABLE beta.licenses (
@@ -66,7 +79,7 @@ class DBAdmin:
             staff_id INTEGER,
             FOREIGN KEY (staff_id)
                 REFERENCES beta.staff (staff_id)
-        )
+        );
         """,
         """
         CREATE TABLE beta.pallets (
@@ -76,28 +89,19 @@ class DBAdmin:
             FOREIGN KEY (recipient_id)
                 REFERENCES beta.recipients (recipient_id)
                 ON UPDATE CASCADE ON DELETE CASCADE
-        )
+        );
         """,
         """
         CREATE TABLE beta.qualities (
             quality_id SERIAL PRIMARY KEY,
             quality VARCHAR(15)
-        )
+        );
         """,
         """
         CREATE TABLE beta.deviceTypes (
             type_id SERIAL PRIMARY KEY,
             deviceType VARCHAR(15)
-        )
-        """,
-        """
-        CREATE TABLE beta.staff (
-            staff_id SERIAL PRIMARY KEY,
-            name VARCHAR(255) UNIQUE,
-            password VARCHAR(100),
-            active Boolean,
-            nameabbrev VARCHAR(100)
-        )
+        );
         """,
         """
         CREATE TABLE beta.harddrives(
@@ -115,7 +119,7 @@ class DBAdmin:
                 REFERENCES beta.staff (staff_id),
             FOREIGN KEY (license_id)
                 REFERENCES beta.licenses (license_id)
-        )
+        );
         """, #note no unique constraint on hdsn
         """
         create table beta.computers(
@@ -124,9 +128,11 @@ class DBAdmin:
             quality_id INTEGER,
             type_id INTEGER not null,
             sn varchar(100),
+            license_id INTEGER,
             FOREIGN KEY (quality_id) REFERENCES beta.qualities (quality_id),
-            FOREIGN KEY (type_id) REFERENCES beta.devicetypes (type_id)
-        )
+            FOREIGN KEY (type_id) REFERENCES beta.devicetypes (type_id),
+            FOREIGN KEY (license_id) REFERENCES beta.licenses (license_id)
+        );
         """, #note that there isn't a unique constraint on device sn but there is on the pid
         """
         create table beta.donatedgoods(
@@ -140,7 +146,7 @@ class DBAdmin:
             FOREIGN KEY (pc_id) REFERENCES beta.computers (pc_id),
             FOREIGN KEY (hd_id) REFERENCES beta.harddrives (hd_id),
             FOREIGN KEY (staff_id) REFERENCES beta.staff (staff_id)
-        )
+        );
         """,
         """
         CREATE TABLE beta.qualitycontrol(
@@ -155,7 +161,7 @@ class DBAdmin:
                 REFERENCES beta.donations (donation_id),
             FOREIGN KEY (hd_id)
                 REFERENCES beta.harddrives (hd_id)
-        )
+        );
         """,
         """
         CREATE TABLE beta.missingparts(
@@ -168,13 +174,13 @@ class DBAdmin:
             pallet VARCHAR(20),
             FOREIGN KEY (pc_id)
                 REFERENCES beta.computers (pc_id)
-        )
+        );
         """,
         """
         CREATE TABLE beta.internet (
             internet_id SERIAL PRIMARY KEY,
             hotspot_meid VARCHAR(25)
-        )
+        );
         """,
         """
         CREATE TABLE beta.refurbishedDevices(
@@ -188,7 +194,7 @@ class DBAdmin:
                 REFERENCES beta.harddrives (hd_id),
             FOREIGN KEY (internet_id)
                 REFERENCES beta.internet (internet_id)
-        )
+        );
         """,
         """
         CREATE TABLE beta.distributedDevices (
@@ -205,7 +211,7 @@ class DBAdmin:
                 REFERENCES beta.recipients (recipient_id),
             FOREIGN KEY (pallet_id)
                 REFERENCES beta.pallets (pallet_id)
-        )
+        );
         """,
     )
 
@@ -286,8 +292,21 @@ class DBAdmin:
     """
     DROP TABLE if exists beta.recipients;
     """,
+    """
+    DROP SCHEMA IF EXISTS beta CASCADE;
+    """,
     )
 if __name__ == '__main__':
+
+    # This app instantiates a new PostgreSQL database.
+
+    # In order to run, replace "local_launcher" below with the header of the .ini file
+    # section.
+
+    # For future development, consider compiling a CLI app that takes as input
+    # a <example_path>.ini file path.
+
     #batchExecuteSqlCommands('local_launcher',commands=DBAdmin.dropTablesCommands)
-    batchExecuteSqlCommands('appendage',commands=DBAdmin.createTableCommands)
-    batchExecuteSqlCommands('appendage',commands=DBAdmin.initializeDatabaseCommands)
+    #print('deleted beta schema.')
+    batchExecuteSqlCommands('local_launcher',commands=DBAdmin.createTableCommands)
+    batchExecuteSqlCommands('local_launcher',commands=DBAdmin.initializeDatabaseCommands)

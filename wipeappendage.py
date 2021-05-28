@@ -4,7 +4,7 @@ import datetime
 #from demoWriteSheet import *
 import wiperSQL as sql
 import psycopg2
-
+from google_sheets import *
 from reportsAppendage import *
 from lookups import *
 class ProcessedHardDrives(tk.Frame,DBI):
@@ -104,7 +104,7 @@ class ProcessedHardDrives(tk.Frame,DBI):
     def updatehdsn(self,event):
         updatehdSQL = \
         """
-        UPDATE harddrives
+        UPDATE beta.harddrives
             set hdsn = %s
             WHERE {}
             RETURNING device_id;
@@ -129,41 +129,22 @@ class ProcessedHardDrives(tk.Frame,DBI):
         hdStatusUpdate = \
         """
         with logHdStatus as(
-        UPDATE harddrives
+        UPDATE beta.harddrives
         set {},
             wipeDate = %s,
-            staff_id = (Select staff_id from staff s where s.name = %s)
+            staff_id = (Select staff_id from beta.staff s where s.name = %s)
         WHERE {}
         RETURNING hd_id,hdsn,hdpid
         )
-        UPDATE donations
+        UPDATE beta.donations
         SET numwiped = (CASE WHEN numwiped is not null THEN (numwiped + 1) ELSE 0 END)
         WHERE donation_id = (
                             SELECT donation_id
-                            FROM donatedgoods
+                            FROM beta.donatedgoods
                             WHERE hd_id = (SELECT hd_id FROM logHdStatus)
                             )
         RETURNING numwiped,(select hdsn from logHdStatus),(select hd_id from logHdStatus),donation_id,(select hdpid from logHdStatus);
         """
-        # hdStatusUpdate = \
-        # """
-        # with logHdStatus as(
-        # UPDATE harddrives
-        # set {},
-        #     wipeDate = %s,
-        #     staff_id = (Select staff_id from staff s where s.name = %s)
-        # WHERE {}
-        # RETURNING hd_id,hdsn,hdpid
-        # )
-        # UPDATE donations
-        # SET numwiped = (CASE WHEN numwiped is not null THEN (numwiped + 1) ELSE 0 END)
-        # WHERE donation_id = (
-        #                     SELECT donation_id
-        #                     FROM processing
-        #                     WHERE hd_id = (SELECT hd_id FROM logHdStatus)
-        #                     )
-        # RETURNING numwiped,(select hdsn from logHdStatus),(select hd_id from logHdStatus),donation_id,(select hdpid from logHdStatus);
-        # """
         wiped = self.wiperProduct.get()
         if wiped == "Wiped.":
             wipedOrDestroyed="sanitized = TRUE, destroyed = FALSE"
@@ -273,6 +254,8 @@ class deeperHardDriveSearch(tk.Frame,DBI):
         )
         self.updateButton.bind('<Button-1>',self.updateSN)
         self.updateButton.pack()
+        # consider adding a treeview:
+        # this code specifically will not work, but is in the right direction
         # self.tv = tk.ttk.Treeview(self,columns=(1,),show='headings',height=8)
         # self.tv.heading(1,text='HDSN')
         # self.tv.pack()
@@ -289,7 +272,7 @@ class deeperHardDriveSearch(tk.Frame,DBI):
             return """
             with userinput as (SELECT LOWER(%s) as value)
             SELECT hdsn
-            FROM harddrives
+            FROM beta.harddrives
             WHERE destroyed = FALSE
             AND sanitized = FALSE
             AND hdsn ~* (SELECT SUBSTRING(
@@ -302,7 +285,7 @@ class deeperHardDriveSearch(tk.Frame,DBI):
             return """
             with userinput as (SELECT LOWER(%s) as value)
             SELECT hdsn
-            FROM harddrives
+            FROM beta.harddrives
             WHERE destroyed = FALSE
             AND sanitized = FALSE
             AND hdsn ~* (SELECT SUBSTRING(
@@ -327,10 +310,6 @@ class deeperHardDriveSearch(tk.Frame,DBI):
             self.parentHD.delete(0,'end')
             self.parentHD.insert(0,hd)
             self.parent.destroy()
-            #now = datetime.datetime.now()
-            #sqlUpdateStatement=self.sqlUpdateStatement.format("hdsn = LOWER('%s')" % (hd,))
-            #self.fetchone(sqlUpdateStatement,(now,self.username))
-            #self.conn.commit()
     def updateSN(self,event):
         hdBanked = self.hdvar.get()
         if hdBanked == "select a hd:":
@@ -363,7 +342,7 @@ class UpdateHD(tk.Frame,DBI):
         try:
             updateSQL = \
             """
-            UPDATE harddrives
+            UPDATE beta.harddrives
             SET hdsn = %s
             WHERE hdsn = %s;
             """
@@ -373,7 +352,203 @@ class UpdateHD(tk.Frame,DBI):
             self.err.set(error)
         finally:
             return self
+class qc(tk.Frame,DBI):
+    def __init__(self,parent,*args,**kwargs):
+        tk.Frame.__init__(self,parent,*args)
+        DBI.__init__(self,ini_section = kwargs['ini_section'])
+        if "hd" in kwargs and "hdpid" in kwargs:
+            self.hd = kwargs['hd']
+            self.hdpid = kwargs['hdpid']
+        elif "hdpid" in kwargs:
+            self.hdpid = kwargs['hdpid']
+            hdSQL = \
+            """
+            SELECT hdsn
+            FROM beta.harddrives
+            WHERE hdpid = LOWER(%s);
+            """
+            res = self.fetchone(hdSQL,self.hdpid)
+            if res != None:
+                self.hd = res[0]
+            else:
+                self.hd = None
+        else:
+            self.hd = kwargs['hd']
+            hdpidSQL = \
+            """
+            SELECT hdpid
+            FROM beta.harddrives
+            WHERE hdsn = LOWER(%s);
+            """
+            res = self.fetchone(hdpidSQL,self.hd)
+            if res != None:
+                self.hdpid = res[0]
+            else:
+                self.hdpid = None
+        self.hdstatus=kwargs['status']
+        if 'donation_id' in kwargs:
+            self.donation_id = kwargs['donation_id']
+        else:
+            donationIDFromHDinfo= \
+            """
+            SELECT donation_id
+            FROM beta.donatedgoods
+            INNER JOIN beta.harddrives hd USING (hd_id)
+            WHERE {};
+            """
+            if self.hdpid is not None:
+                donationIDFromHDPID = donationIDFromHDinfo.format("hd.hdpid = LOWER(%s)")
+                self.donation_id = self.fetchone(donationIDFromHDPID,self.hdpid)[0]
+            else:
+                donationIDFromHDSN = donationIDFromHDinfo.format("hd.hdsn = LOWER(%s)")
+                self.donation_id = self.fetchone(donationIDFromHDSN,self.hd)[0]
+        if 'hd_id' in kwargs:
+            self.hd_id = kwargs['hd_id']
+        else:
+            get_hd_id = \
+            """
+            SELECT hd_id
+            FROM beta.harddrives hd
+            WHERE {};
+            """
+            if self.hdpid is not None:
+                hd_id_fromHDPID = get_hd_id.format("hd.hdpid = LOWER(%s)")
+                self.hd_id = self.fetchone(hd_id_fromHDPID,self.hdpid)[0]
+            else:
+                hd_id_fromHDSN = get_hd_id.format("hd.hdsn = LOWER(%s)")
+                self.hd_id = self.fetchone(hd_id_fromHDSN,self.hd)[0]
+        getStaffqc = \
+        """
+        SELECT name
+        FROM beta.staff
+        WHERE name != %s
+        AND active=TRUE;
+        """
+        stafflist = self.fetchall(getStaffqc,kwargs['name'])
+        snames =[staff[0] for staff in stafflist]
+        self.staffName = tk.StringVar(parent,value="staff:")
+        self.staffDD = tk.OptionMenu(parent,self.staffName,"staff:",*snames)
+        instructions=tk.Label(parent,text='please get another staff member to perform quality check\nfor hard drive:').pack()
+        hdidlabel = tk.Label(parent,text =self.hdpid).pack()
+        hdlabel = tk.Label(parent,text =self.hd).pack()
+        self.wiperProduct = tk.Label(parent,text="HD is " + kwargs['status']).pack()
+        self.staffDD.pack()
+        self.password=tk.Entry(parent)
+        self.password.pack()
+        logQC = tk.Button(parent,
+            text='log QC',
+            width = 15,
+            height = 2,
+            bg = "blue",
+            fg = "yellow",
+        )
+        logQC.bind('<Button-1>',self.logQC)
+        logQC.pack()
+        self.err = tk.StringVar(parent)
+        tk.Label(parent,textvariable=self.err).pack()
+    def staff_password_check(self,name,pwd):
+        pwdCheckSQL = \
+        """
+        WITH UI AS (
+            SELECT
+                %s as name,
+                %s as pwd)
+        SELECT (
+            CASE
+                WHEN s.name = (SELECT name FROM UI)
+                    AND s.password = (SELECT pwd FROM UI)
+                        THEN staff_id
+                ELSE
+                        NULL
+                END
+               )
+            FROM staff s
+            WHERE s.name = (SELECT name from UI);
+        """
+        try:
+            if self.fetchone(pwdCheckSQL,name,pwd) is None:
+                raise AttributeError("Not connected to Database.")
+            elif self.fetchone(pwdCheckSQL,name,pwd)[0] is None:
+                print('password incorrect.')
+                return False
+            else:
+                return True
+        except (Exception, psycopg2.DatabaseError) as error:
+            print(error)
+            self.err.set(error)
 
+
+    def logQC(self,event):
+        name = self.staffName.get()
+        pwd=self.password.get()
+        try:
+            if self.staff_password_check(name,pwd) is not True:
+                self.err.set(f'password incorrect for selected user: {name}')
+                return self
+        except AttributeError as err:
+            self.err.set(err)
+            return self
+        if name == "staff:":
+            self.err.set('select a staff from the drop down.')
+            return self
+        try:
+            qualityControlLog = \
+            """
+            DROP TABLE IF EXISTS ui;
+            CREATE TEMP TABLE ui(hd_id INTEGER,qc_time TIMESTAMP,donation_id INTEGER,staff_id INTEGER);
+            select * from ui;
+            INSERT INTO ui(hd_id,qc_time,staff_id)
+            VALUES(
+                %s,
+                NOW(),
+                (select staff_id from beta.staff where name = %s)
+                );
+
+            UPDATE ui
+            SET donation_id = (
+                SELECT g.donation_id
+                FROM beta.donatedgoods g
+                WHERE g.hd_id = (SELECT hd_id from ui)
+                              );
+            INSERT INTO beta.qualitycontrol(hd_id,qcDate,donation_id,staff_id)
+            SELECT hd_id,qc_time, donation_id, staff_id
+            FROM ui;
+            Update beta.donations
+            set numwiped = 1
+            WHERE donation_id = (SELECT donation_id from ui);
+            DROP TABLE ui;
+            """
+            out=self.insertToDB(qualityControlLog,self.hd_id,name)
+            self.err.set(out)
+        except (Exception, psycopg2.DatabaseError) as error:
+            self.err.set(error)
+        finally:
+            return self
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("Wiper Station")
+    app = ProcessedHardDrives(root,ini_section='local_launcher')
+    app.mainloop()
+# hdStatusUpdate = \
+# """
+# with logHdStatus as(
+# UPDATE harddrives
+# set {},
+#     wipeDate = %s,
+#     staff_id = (Select staff_id from staff s where s.name = %s)
+# WHERE {}
+# RETURNING hd_id,hdsn,hdpid
+# )
+# UPDATE donations
+# SET numwiped = (CASE WHEN numwiped is not null THEN (numwiped + 1) ELSE 0 END)
+# WHERE donation_id = (
+#                     SELECT donation_id
+#                     FROM processing
+#                     WHERE hd_id = (SELECT hd_id FROM logHdStatus)
+#                     )
+# RETURNING numwiped,(select hdsn from logHdStatus),(select hd_id from logHdStatus),donation_id,(select hdpid from logHdStatus);
+# """
 #
 # class HdFacts(tk.Frame,DBI):
 #     def __init__(self,parent,*args,**kwargs):
@@ -501,188 +676,10 @@ class UpdateHD(tk.Frame,DBI):
 #         finally:
 #             return self
 
-class qc(tk.Frame,DBI):
-    def __init__(self,parent,*args,**kwargs):
-        tk.Frame.__init__(self,parent,*args)
-        DBI.__init__(self,ini_section = kwargs['ini_section'])
-        if "hd" in kwargs and "hdpid" in kwargs:
-            self.hd = kwargs['hd']
-            self.hdpid = kwargs['hdpid']
-        elif "hdpid" in kwargs:
-            self.hdpid = kwargs['hdpid']
-            hdSQL = \
-            """
-            SELECT hdsn
-            FROM harddrives
-            WHERE hdpid = LOWER(%s);
-            """
-            res = self.fetchone(hdSQL,self.hdpid)
-            if res != None:
-                self.hd = res[0]
-            else:
-                self.hd = None
-        else:
-            self.hd = kwargs['hd']
-            hdpidSQL = \
-            """
-            SELECT hdpid
-            FROM harddrives
-            WHERE hdsn = LOWER(%s);
-            """
-            res = self.fetchone(hdpidSQL,self.hd)
-            if res != None:
-                self.hdpid = res[0]
-            else:
-                self.hdpid = None
-        self.hdstatus=kwargs['status']
-        if 'donation_id' in kwargs:
-            self.donation_id = kwargs['donation_id']
-        else:
-            donationIDFromHDinfo= \
-            """
-            SELECT donation_id
-            FROM donatedgoods
-            INNER JOIN harddrives hd USING (hd_id)
-            WHERE {};
-            """
-            # donationIDFromHDinfo= \
-            # """
-            # SELECT donation_id
-            # FROM processing
-            # INNER JOIN harddrives hd USING (hd_id)
-            # WHERE {};
-            # """
-            if self.hdpid is not None:
-                donationIDFromHDPID = donationIDFromHDinfo.format("hd.hdpid = LOWER(%s)")
-                self.donation_id = self.fetchone(donationIDFromHDPID,self.hdpid)[0]
-            else:
-                donationIDFromHDSN = donationIDFromHDinfo.format("hd.hdsn = LOWER(%s)")
-                self.donation_id = self.fetchone(donationIDFromHDSN,self.hd)[0]
-        if 'hd_id' in kwargs:
-            self.hd_id = kwargs['hd_id']
-        else:
-            get_hd_id = \
-            """
-            SELECT hd_id
-            FROM harddrives hd
-            WHERE {};
-            """
-            if self.hdpid is not None:
-                hd_id_fromHDPID = get_hd_id.format("hd.hdpid = LOWER(%s)")
-                self.hd_id = self.fetchone(hd_id_fromHDPID,self.hdpid)[0]
-            else:
-                hd_id_fromHDSN = get_hd_id.format("hd.hdsn = LOWER(%s)")
-                self.hd_id = self.fetchone(hd_id_fromHDSN,self.hd)[0]
-        getStaffqc = \
-        """
-        SELECT name
-        FROM staff
-        WHERE name != %s
-        AND active=TRUE;
-        """
-        stafflist = self.fetchall(getStaffqc,kwargs['name'])
-        snames =[staff[0] for staff in stafflist]
-        self.staffName = tk.StringVar(parent,value="staff:")
-        self.staffDD = tk.OptionMenu(parent,self.staffName,"staff:",*snames)
-        instructions=tk.Label(parent,text='please get another staff member to perform quality check\nfor hard drive:').pack()
-        hdidlabel = tk.Label(parent,text =self.hdpid).pack()
-        hdlabel = tk.Label(parent,text =self.hd).pack()
-        self.wiperProduct = tk.Label(parent,text="HD is " + kwargs['status']).pack()
-        self.staffDD.pack()
-        self.password=tk.Entry(parent)
-        self.password.pack()
-        logQC = tk.Button(parent,
-            text='log QC',
-            width = 15,
-            height = 2,
-            bg = "blue",
-            fg = "yellow",
-        )
-        logQC.bind('<Button-1>',self.logQC)
-        logQC.pack()
-        self.err = tk.StringVar(parent)
-        tk.Label(parent,textvariable=self.err).pack()
-    def staff_password_check(self,name,pwd):
-        pwdCheckSQL = \
-        """
-        WITH UI AS (
-            SELECT
-                %s as name,
-                %s as pwd)
-        SELECT (
-            CASE
-                WHEN s.name = (SELECT name FROM UI)
-                    AND s.password = (SELECT pwd FROM UI)
-                        THEN staff_id
-                ELSE
-                        NULL
-                END
-               )
-            FROM staff s
-            WHERE s.name = (SELECT name from UI);
-        """
-        try:
-            if self.fetchone(pwdCheckSQL,name,pwd) is None:
-                raise AttributeError("Not connected to Database.")
-            elif self.fetchone(pwdCheckSQL,name,pwd)[0] is None:
-                print('password incorrect.')
-                return False
-            else:
-                return True
-        except (Exception, psycopg2.DatabaseError) as error:
-            print(error)
-            self.err.set(error)
-
-
-    def logQC(self,event):
-        name = self.staffName.get()
-        pwd=self.password.get()
-        try:
-            if self.staff_password_check(name,pwd) is not True:
-                self.err.set(f'password incorrect for selected user: {name}')
-                return self
-        except AttributeError as err:
-            self.err.set(err)
-            return self
-        if name == "staff:":
-            self.err.set('select a staff from the drop down.')
-            return self
-        try:
-            qualityControlLog = \
-            """
-            DROP TABLE IF EXISTS ui;
-            CREATE TEMP TABLE ui(hd_id INTEGER,qc_time TIMESTAMP,donation_id INTEGER,staff_id INTEGER);
-            select * from ui;
-            INSERT INTO ui(hd_id,qc_time,staff_id)
-            VALUES(
-                %s,
-                NOW(),
-                (select staff_id from staff where name = %s)
-                );
-
-            UPDATE ui
-            SET donation_id = (
-                SELECT g.donation_id
-                FROM donatedgoods g
-                WHERE g.hd_id = (SELECT hd_id from ui)
-                              );
-            INSERT INTO qualitycontrol(hd_id,qcDate,donation_id,staff_id)
-            SELECT hd_id,qc_time, donation_id, staff_id
-            FROM ui;
-            Update donations
-            set numwiped = 1
-            WHERE donation_id = (SELECT donation_id from ui);
-            DROP TABLE ui;
-            """
-            out=self.insertToDB(qualityControlLog,self.hd_id,name)
-            self.err.set(out)
-        except (Exception, psycopg2.DatabaseError) as error:
-            self.err.set(error)
-        finally:
-            return self
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("Wiper Station")
-    app = ProcessedHardDrives(root,ini_section='local_launcher')
-    app.mainloop()
+# donationIDFromHDinfo= \
+# """
+# SELECT donation_id
+# FROM processing
+# INNER JOIN harddrives hd USING (hd_id)
+# WHERE {};
+# """
