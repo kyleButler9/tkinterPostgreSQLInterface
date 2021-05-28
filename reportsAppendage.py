@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 from os.path import join
 from donationBanner import *
-
+from google_sheets import *
 
 class InvestigateLots(DonationBanner,DBI):
     def __init__(self,parent,*args,**kwargs):
@@ -139,6 +139,9 @@ class Report(DonationBanner,DBI):
         self.pclotsDD.pack()
 
         DonationBanner.__init__(self,parent,ini_section=kwargs['ini_section'])
+        self.google_sheets=UpdateSheets(self,
+                            donation_id=self.donationIDVar.get(),
+                            ini_section=self.ini_section)
         self.lookIntoLot = tk.Button(parent,
             text='Look into selected lot',
             width = 20,
@@ -232,6 +235,8 @@ class Report(DonationBanner,DBI):
         self.err.set('Files successfully saved in your Downloads folder.')
         return self
     def devicesToTuple(self):
+        self.google_sheets.donation_id=self.donationIDVar.get()
+        self.google_sheets.overWrite_sanitization()
         deviceInfo = \
         """
         SELECT dt.deviceType, c.SN,
@@ -255,6 +260,9 @@ class Report(DonationBanner,DBI):
             devices[driveNum] = (driveNum,) + devices[driveNum]
         return tuple(devices)
     def qcDevicesToTuple(self):
+        self.google_sheets.donation_id=self.donationIDVar.get()
+        print('did',self.google_sheets.donation_id)
+        self.google_sheets.overWrite_qc()
         #note that this query avoids concern with the donations id column of the qc table
         qcInfo = \
         """

@@ -1,12 +1,16 @@
 import tkinter as tk
 from tkinter import ttk
-from sql import *
 from config import DBI
 from donationBanner import *
 from dataclasses import dataclass,fields,field
 from collections import namedtuple
 from Barcode_Scanner_Entries import *
 from google_sheets import *
+
+# note:
+#   You can insert just an asset tag and it will go into the beta.donatedgoods table
+#   having PC ID NULL and HD ID NULL. It will not be in the reports though in their
+#   current iteration.
 
 @dataclass(order=True,frozen=True)
 class NonBarcode_Vals:
@@ -316,6 +320,8 @@ class InsertDrives(tk.Frame,DBI):
         else:
             hd_insert = "SELECT NULL::int as hd_table_id"
         return insertDevice.format(computer_insert,hd_insert)
+    def insertDevice_hotkey(self):
+        self.insertDevice(None)
     def insertDevice(self,event):
         args = self.get_vals_from_form()
         submitted_headers= NonBarcode_Vals(args[0],args[6],args[7],args[8])
@@ -326,7 +332,6 @@ class InsertDrives(tk.Frame,DBI):
                 self.lastDevice.table_keys = Table_Keys(*out)
                 self.conn.commit()
                 self.google_sheets.donation_id=out[1]
-                print(out)
                 self.google_sheets.overWrite()
                 #note: next line is breaking.
                 self.update_last_device_log(out,submitted_form,submitted_headers)
@@ -527,7 +532,7 @@ class extractionGUI(ttk.Notebook):
             donationID=donationIDVar,
             lastDevice_info=lastDevice,
             lastDevice_nonBarCode=lastDevice_nonBarCode)
-        parent.bind('<Control-space>',InsertDrives.insertDevice)
+        parent.bind('<Control-space>',Obj.insertDevice)
         self.tab2 = ttk.Frame()
         Review(self.tab2,Barcode_Vals,
             ini_section=kwargs['ini_section'],

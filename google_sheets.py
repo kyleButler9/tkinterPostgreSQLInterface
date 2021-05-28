@@ -75,13 +75,12 @@ def write_to_sheet(*args,**kwargs):
     """
     overwrites values in a given spreadsheet.
     """
-    print('starting')
     # values is the list of lists that is to be written to spreadsheet_id.
     # it is structured like  [[row],[row],...].
-    if 'sheet_' in kwargs:
-        sheet_=kwargs['sheet_']
+    if 'tab' in kwargs:
+        tab=kwargs['tab']
     else:
-        sheet_='Sanitization Log'
+        tab='Sanitization Log'
     try:
         spreadsheet_id, values = args
         # print('Sheet Located Here: \n\n\thttps://docs.google.com/spreadsheets/d/'+spreadsheet_id)
@@ -109,10 +108,7 @@ def write_to_sheet(*args,**kwargs):
     body = {
         'values': values
     }
-    print('there')
-    print(sheet_)
-    print('here!')
-    range_name=f'{sheet_}!A1:I10000'
+    range_name=f'{tab}!A1:I10000'
     value_input_option = 'USER_ENTERED'
     result = service.spreadsheets().values().update(
         spreadsheetId=HTTP_decorator(spreadsheet_id), range=range_name,
@@ -151,9 +147,73 @@ class UpdateSheets(DBI):
             DBI.__init__(self,ini_section = kwargs['ini_section'])
         self.donation_id=kwargs['donation_id']
         print('google_sheets/UpdateSheets successfully initialized.')
-    def overWrite(self,**kwargs):
-        if 'sheet_id_var' in kwargs:
-            sheet_id = kwargs['sheet_id_var']
+    def overWrite_qc(self,**kwargs):
+        if 'tab_id' in kwargs:
+            tab_id = kwargs['tab_id']
+        else:
+            tab_id='Quality Check'
+        if 'sheet_id' in kwargs:
+            sheet_id = kwargs['sheet_id']
+        else:
+            get_sheet_id = \
+            """
+            SELECT sheetid FROM beta.donations WHERE donation_id = %s;
+            """
+            try:
+                sheet_id = self.fetchone(get_sheet_id,self.donation_id)[0]
+            except:
+                print('no sheet id returned for that lot')
+                print('returned:',self.fetchone(get_sheet_id,self.donation_id))
+        get_donationInfo = \
+            """
+            SELECT d.name, don.dateReceived, don.lotNumber
+            FROM beta.donors d
+            INNER JOIN beta.donations don USING (donor_id)
+            WHERE don.donation_id = %s;
+            """
+        donationInfo=self.fetchone(get_donationInfo,self.donation_id)
+        report = [
+            ['Company Name: {}'.format(donationInfo[0])],
+            ['Date Received: {} '.format(donationInfo[1].strftime('%m/%d/%Y'))],
+            ['Lot Number: {}'.format(donationInfo[2])],
+            ['']
+        ]
+        cols = 'Sample	HD Serial Number	Date Reviewed	Staff'
+        report.append(cols.split('	'))
+        # The use of the inner joins below necessitates the insertion of both
+        # device type and staff into database in association with the
+        # device in order to be returned by this query.
+        qcInfo = \
+        """
+        SELECT hd.hdsn, TO_CHAR(qc.qcDate,'MM/DD/YYYY'),s.nameabbrev
+        FROM beta.qualitycontrol qc
+        INNER JOIN beta.staff s USING (staff_id)
+        INNER JOIN beta.harddrives hd USING (hd_id)
+        INNER JOIN beta.donatedgoods g USING (hd_id)
+        WHERE g.donation_id = %s;
+        """
+        devices = self.fetchall(qcInfo,self.donation_id)
+        drive = [1]
+        for device in devices:
+            dlist = list(device)
+            try:
+                dlist[-1] = dlist[-1].strftime("%m/%d/%Y %H:%M")
+            except:
+                # raise exception here instead of print.
+                # print('no datetime or datetime unacceptable so skipping time -> string conversion to "%m/%d/%Y %H:%M" format.')
+                pass
+            finally:
+                report.append(drive + dlist)
+                drive[0]+=1
+        write_to_sheet(sheet_id,report,tab=tab_id)
+        return self
+    def overWrite_sanitization(self,**kwargs):
+        if 'tab_id' in kwargs:
+            tab_id = kwargs['tab_id']
+        else:
+            tab_id='Sanitization Log'
+        if 'sheet_id' in kwargs:
+            sheet_id = kwargs['sheet_id']
         else:
             get_sheet_id = \
             """
@@ -212,7 +272,8 @@ class UpdateSheets(DBI):
             finally:
                 report.append(drive + dlist)
                 drive[0]+=1
-        write_to_sheet(sheet_id,report,sheet_='Sanitization Log')
+        write_to_sheet(sheet_id,report,tab=tab_id)
+        return self
 if __name__ == '__main__':
     # You need to have a credentials.json file and a token.pickle file in your
     # working directory

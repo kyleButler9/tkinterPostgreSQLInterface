@@ -31,7 +31,7 @@ class ComputerFacts(tk.Frame,DBI):
                 hd.sanitized,hd.destroyed,hd.hdpid
         FROM beta.donatedgoods g
         INNER JOIN beta.harddrives hd USING (hd_id)
-        LEFT OUTER JOIN beta.computers c USING (p_id)
+        LEFT OUTER JOIN beta.computers c USING (pc_id)
         INNER JOIN beta.donations d USING (donation_id)
         INNER JOIN beta.donors donor USING (donor_id)
         INNER JOIN beta.staff s ON s.staff_id=hd.staff_id
@@ -148,7 +148,7 @@ class HdFacts(tk.Frame,DBI):
                 hd.sanitized,hd.destroyed,c.pid
         FROM beta.donatedgoods g
         INNER JOIN beta.harddrives hd USING (hd_id)
-        LEFT OUTER JOIN beta.computers c USING (p_id)
+        LEFT OUTER JOIN beta.computers c USING (pc_id)
         INNER JOIN beta.donations d USING (donation_id)
         INNER JOIN beta.donors donor USING (donor_id)
         INNER JOIN beta.staff s ON s.staff_id=hd.staff_id
@@ -162,7 +162,7 @@ class HdFacts(tk.Frame,DBI):
                 hd.sanitized,hd.destroyed,c.pid
         FROM beta.donatedgoods g
         INNER JOIN beta.harddrives hd USING (hd_id)
-        LEFT OUTER JOIN beta.computers c USING (p_id)
+        LEFT OUTER JOIN beta.computers c USING (pc_id)
         INNER JOIN beta.donations d USING (donation_id)
         INNER JOIN beta.donors donor USING (donor_id)
         INNER JOIN beta.staff s ON s.staff_id=g.staff_id

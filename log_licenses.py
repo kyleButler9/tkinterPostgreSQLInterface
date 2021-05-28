@@ -220,7 +220,9 @@ class SNPK(tk.Frame,DBI):
         #finally, it returns the license id associated with the new row or updated old row.
         insert_snpk = \
         """
-        WITH inputs as (SELECT TRIM(LOWER(%s)) as sn, TRIM(LOWER(%s)) as pk, (SELECT s.staff_id FROM beta.staff s where s.name = %s) as s_id)
+        WITH inputs as (SELECT TRIM(LOWER(%s)) as sn,
+                        TRIM(LOWER(%s)) as pk,
+                        (SELECT s.staff_id FROM beta.staff s where s.name = %s) as s_id)
         INSERT INTO beta.licenses(
             serialNumber,productKey,staff_id,entry_time)
         VALUES(
@@ -293,7 +295,7 @@ def main():
     root.title("Log Licenses")
     #here we instantiate the SNPK class (which itself instantiates the other classes and so on, so forth)
     #ini_section is the section that has the DB info in the .ini file
-    app = SNPK(root,ini_section='appendage')
+    app = SNPK(root,ini_section='local_launcher')
     #this just runs the GUI. And we're off!
     app.mainloop()
 if __name__ == "__main__":

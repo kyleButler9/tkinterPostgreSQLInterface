@@ -2,7 +2,6 @@ from config import DBI;
 import tkinter as tk
 import datetime
 #from demoWriteSheet import *
-import wiperSQL as sql
 import psycopg2
 from google_sheets import *
 from reportsAppendage import *
@@ -13,12 +12,16 @@ class ProcessedHardDrives(tk.Frame,DBI):
         tk.Frame.__init__(self,parent,*args)
         parent.geometry("300x500")
         DBI.__init__(self,ini_section = kwargs['ini_section'])
-        #tk.Frame.__init__(self,parent,*args)
         self.parent=parent
         self.ini_section = kwargs['ini_section']
         self.devicesTuple = tuple()
-        #DBI.__init__(self,ini_section = kwargs['ini_section'])
-        stafflist = self.fetchall(sql.DeviceInfo.getStaff)
+        getStaff = \
+        """
+        SELECT name
+        FROM beta.staff
+        WHERE active=TRUE;
+        """
+        stafflist = self.fetchall(getStaff)
         snames =[staff[0] for staff in stafflist]
         self.staffName = tk.StringVar(parent,value="staff:")
         self.staffDD = tk.OptionMenu(parent,self.staffName,"staff:",*snames)
@@ -88,9 +91,9 @@ class ProcessedHardDrives(tk.Frame,DBI):
         self.getHdsnInfobutton.pack()
         tk.Label(parent,textvariable=self.hdpidLog).pack()
         tk.Label(parent,textvariable=self.hdLog).pack()
-        #the following is dangerous. Its probably fine... but manually
-        #logging into database and doing the update would be better.
-        #self.updatehdsnbutton.pack()
+        # the following is dangerous. Its probably fine... but manually
+        # logging into database and doing the update would be better.
+        # self.updatehdsnbutton.pack()
     def getHdsnInfo(self,event):
         pop_up = tk.Toplevel(self.parent)
         kwargs = dict()
@@ -462,7 +465,7 @@ class qc(tk.Frame,DBI):
                         NULL
                 END
                )
-            FROM staff s
+            FROM beta.staff s
             WHERE s.name = (SELECT name from UI);
         """
         try:

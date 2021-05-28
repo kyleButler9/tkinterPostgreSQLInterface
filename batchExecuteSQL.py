@@ -73,7 +73,7 @@ class DBAdmin:
         """
         CREATE TABLE beta.licenses (
             license_id SERIAL PRIMARY KEY,
-            serialNumber VARCHAR(100),
+            serialNumber VARCHAR(100) UNIQUE,
             productKey VARCHAR(100),
             entry_time timestamp,
             staff_id INTEGER,
