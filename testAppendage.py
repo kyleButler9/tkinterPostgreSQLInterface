@@ -14,7 +14,7 @@ class InsertLog(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent,*args)
         DBI.__init__(self,ini_section = kwargs['ini_section'])
-        deviceQualities = self.fetchall("SELECT quality FROM qualities;")
+        deviceQualities = self.fetchall("SELECT quality FROM beta.qualities;")
         qtypes =[quality[0] for quality in deviceQualities]
         self.qualityName = tk.StringVar(parent,value="quality:")
         self.qualityDD = tk.OptionMenu(parent,self.qualityName,"quality:",*qtypes)
@@ -59,12 +59,12 @@ class InsertLog(tk.Frame,DBI):
             resolved,
             issue,
             notes,
-            device_id,
+            pc_id,
             pallet)
-        VALUES(%s,%s,%s,%s,(SELECT pc_id
+        VALUES((SELECT quality_id from beta.qualities where quality=%s),%s,%s,%s,(SELECT pc_id
                             FROM beta.computers
                             WHERE pid LIKE LOWER(%s)),%s)
-        RETURNING mp_id,device_id;
+        RETURNING mp_id,pc_id;
         """
         back = self.fetchone(insertLog,quality,False,
                             log,notes,pid,pallet)
@@ -124,10 +124,10 @@ class AssociatePidAndLicense(tk.Frame,DBI):
             """
             UPDATE beta.computers c
             SET license_id = (SELECT license_id
-                                FROM licenses
+                                FROM beta.licenses
                                 WHERE serialNumber=%s),
                 quality_id = (SELECT quality_id
-                                FROM qualities q
+                                FROM beta.qualities q
                                 WHERE q.quality = %s)
             WHERE c.pid = %s
             RETURNING pc_id,license_id;
@@ -138,9 +138,9 @@ class AssociatePidAndLicense(tk.Frame,DBI):
             """
             UPDATE beta.computers c
             SET license_id = (SELECT license_id
-                                FROM licenses
-                                WHERE serialNumber=%s)
-            WHERE pid = %s
+                                FROM beta.licenses
+                                WHERE serialNumber='we4rty')
+            WHERE pid = 'md123-123'
             RETURNING pc_id,license_id;
             """
             back=self.fetchone(licenseToPid,sn,pid)
@@ -165,7 +165,7 @@ class AssociatePidAndLicense(tk.Frame,DBI):
 class Banner(tk.Frame):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent)
-        tk.Label(parent,text='Please insert licenses \n then attach to devices.').pack()
+        tk.Label(parent,text='Please attach licenses to devices.').pack()
 class testGUI(ttk.Notebook):
     def __init__(self,parent,*args,**kwargs):
         self.donationIDVar = tk.StringVar()
