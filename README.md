@@ -21,17 +21,17 @@ Prerequisites:
                     Run google_sheets.py
 
 <h1> Getting Started: </h1>
-Step 1) In the terminal, run "pip install -r Requirements.txt"
-Step 2) run the batchExecuteSQL.py script to instantiate your Postgresql database
+Download this repo, python and navigate here in powershell
+Step 1) Run "pip install -r Requirements.txt"
+Step 2) Run the 'py batchExecuteSQL.py' script to instantiate your Postgresql database
 
 
 In order to compile a microservice:
 
-Step 0)  In the terminal, run "pip install -r Requirements.txt"
-Step 1)  In Powershell, type "pyinstaller --onefile <example_micro>.py"
+Step 1)  In Powershell, type "pyinstaller <example_micro>.py"
 Step 2)  Copy the following google directories below from your
           Python Application install locations' Python//Lib/site-packages directory
-          To your dist/<example_micro> directory created by pyinstaller
+          To the dist/<example_micro> directory created by pyinstaller
             {
                 google_api_core-1.25.0.dist-info
                 google_api_core-1.25.0-py3.9.egg-info
