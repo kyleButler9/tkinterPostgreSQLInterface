@@ -399,8 +399,11 @@ class qc(tk.Frame,DBI):
             INNER JOIN beta.harddrives hd USING (hd_id)
             WHERE {};
             """
+            print(self.hdpid)
+            print(type(self.hdpid))
             if self.hdpid is not None:
                 donationIDFromHDPID = donationIDFromHDinfo.format("hd.hdpid = LOWER(%s)")
+                print(donationIDFromHDPID)
                 self.donation_id = self.fetchone(donationIDFromHDPID,self.hdpid)[0]
             else:
                 donationIDFromHDSN = donationIDFromHDinfo.format("hd.hdsn = LOWER(%s)")

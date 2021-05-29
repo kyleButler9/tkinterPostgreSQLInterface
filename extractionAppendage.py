@@ -332,7 +332,7 @@ class InsertDrives(tk.Frame,DBI):
                 self.lastDevice.table_keys = Table_Keys(*out)
                 self.conn.commit()
                 self.google_sheets.donation_id=out[1]
-                self.google_sheets.overWrite()
+                self.google_sheets.overWrite_sanitization()
                 #note: next line is breaking.
                 self.update_last_device_log(out,submitted_form,submitted_headers)
                 self.clear_form()
@@ -357,7 +357,7 @@ class InsertDrives(tk.Frame,DBI):
                 self.lastDevice.table_keys = Table_Keys(*out)
                 self.conn.commit()
                 self.google_sheets.donation_id=out[1]
-                self.google_sheets.overWrite()
+                self.google_sheets.overWrite_sanitization()
                 #note: next line is breaking.
                 self.update_last_device_log(out,submitted_form,submitted_headers)
                 self.clear_HD_form()
@@ -512,7 +512,7 @@ class Review(InsertDrives):
             out=self.insertToDB(sql.msg,*sql.args)
             print(out)
         self.google_sheets.donation_id=self.donationID.get()
-        self.google_sheets.overWrite()
+        self.google_sheets.overWrite_sanitization()
 
 class extractionGUI(ttk.Notebook):
     def __init__(self,parent,*args,**kwargs):

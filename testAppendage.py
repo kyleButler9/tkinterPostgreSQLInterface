@@ -3,7 +3,6 @@ from tkinter import ttk
 from tkcalendar import Calendar
 import datetime
 import re
-from sql import *
 from config import DBI
 
 # improvements include:
@@ -89,7 +88,12 @@ class AssociatePidAndLicense(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent)
         DBI.__init__(self,ini_section=kwargs['ini_section'])
-        deviceQualities = self.fetchall(DeviceInfo.getDeviceQualities)
+        getDeviceQualities = \
+        """
+        SELECT q.quality
+        FROM beta.qualities q;
+        """
+        deviceQualities = self.fetchall(getDeviceQualities)
         qtypes =[quality[0] for quality in deviceQualities]
         self.qualityName = tk.StringVar(parent,value="quality:")
         self.qualityDD = tk.OptionMenu(parent,self.qualityName,"quality:",*qtypes)

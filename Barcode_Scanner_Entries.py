@@ -6,7 +6,7 @@ from datetime import datetime,timedelta
 from dataclasses import dataclass,field,fields
 import time
 
-THRESHOLD=100 #MAKE THRESHOLD SMALLER OR LARGER TO ADJUST BARCODE MODE 
+THRESHOLD=100 #MAKE THRESHOLD SMALLER OR LARGER TO ADJUST BARCODE MODE
 
 class Entry_Form(tk.Frame):
     def __init__(self,parent,ROW,Entry_Vals,*args,**kwargs):
@@ -143,6 +143,29 @@ class BarcodeScannerMode(Entry_Form):
     def human_keyup(self,e):
         return self
 
+
+# this class here determines the entries part of the gui.
+# you can add another label and entry row
+# by merely editing this class and adding another row there
+@dataclass(order=True,frozen=True)
+class Entry_Vals_Main:
+    pc_id: str = None
+    pc_sn: str = None
+    hd_id: str = None
+    hd_sn: str = None
+    asset_tag: str = None
+if __name__ == "__main__":
+    #when you run the script, actually only this stuff below runs. Everything above was definitions. Within definitions you instantiate other things you've defined,
+    #but its all just definitions! Up until the stuff below.
+    #this first line is basic for all tkinter GUI creation. this "root" becomes "parent" in the classes defined above.
+    root = tk.Tk()
+    #here we set the top banner of the app. We can also mess with the geometry, etc. of the GUI by other root.[some stuff]
+    root.title("Barcodes")
+    #here we instantiate the SNPK class (which itself instantiates the other classes and so on, so forth)
+    #ini_section is the section that has the DB info in the .ini file
+    app = BarcodeScannerMode(root,0,Entry_Vals_Main)
+    #this just runs the GUI. And we're off!
+    app.mainloop()
 # class DD_Form(tk.Frame):
 #     def __init__(self,parent,ROW,Entry_Vals,*args,**kwargs):
 #         self.parent=parent
@@ -163,25 +186,3 @@ class BarcodeScannerMode(Entry_Form):
 #         return self.Entry_Vals_Fields
 #     def get_entryfield_names(self):
 #         return self.EV_field_names
-# this class here determines the entries part of the gui.
-# you can add another label and entry row
-# by merely editing this class and adding another row there
-@dataclass(order=True,frozen=True)
-class Entry_Vals_Main:
-    pc_id: str = None
-    pc_sn: str = None
-    hd_id: str = None
-    hd_sn: str = None
-    asset_tag: str = None
-if __name__ == "__main__":
-    #when you run the script, actually only this stuff below runs. Everything above was definitions. Within definitions you instantiate other things you've defined,
-    #but its all just definitions! Up until the stuff below.
-    #this first line is basic for all tkinter GUI creation. this "root" becomes "parent" in the classes defined above.
-    root = tk.Tk()
-    #here we set the top banner of the app. We can also mess with the geometry, etc. of the GUI by other root.[some stuff]
-    root.title("Log Licenses")
-    #here we instantiate the SNPK class (which itself instantiates the other classes and so on, so forth)
-    #ini_section is the section that has the DB info in the .ini file
-    app = BarcodeScannerMode(root,0,Entry_Vals_Main,ini_section='local_launcher')
-    #this just runs the GUI. And we're off!
-    app.mainloop()

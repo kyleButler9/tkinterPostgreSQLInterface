@@ -1,21 +1,22 @@
 from configparser import ConfigParser
 import psycopg2
-
-def config(ini_file='database.ini', ini_section='local_distribution_sheet'):
+#   config returns a dictionary
+def config(ini_file='database.ini', ini_section='local_launcher'):
     # create a parser
     parser = ConfigParser()
     # read config file
     parser.read(ini_file)
-
     # get section, default to postgresql
     db = {}
     if parser.has_section(ini_section):
         params = parser.items(ini_section)
         for param in params:
             db[param[0]] = param[1]
+    elif len(parser.read(ini_file)) == 0:
+        raise Exception("No {0} in same directory as {1}".format(ini_file,__name__))
+
     else:
         raise Exception('Section {0} not found in the {1} file'.format(ini_section, ini_file))
-
     return db
 
 class DBI:
@@ -109,5 +110,5 @@ if __name__ == "__main__":
     from datetime import datetime
     from sql import *
     now =datetime.now()
-    DBI.cur.execute(DeviceInfo.noteWipedHD,(now,'abc',))
+    DBI.cur.execute(testConnection)
     print(len(DBI.cur.fetchall()))

@@ -191,7 +191,7 @@ class SelectDonation(tk.Frame,DBI):
             """
             self.insertToDB(update_db_with_sheetid,
                     self.sheet_id.get(),self.donationIDVar.get())
-        #self.sheetIDVar_.set('Sheet ID: '+ids[1])
+        print(f'Active Sheet: \n\n\t\t https://docs.google.com/spreadsheets/d/{self.sheet_id.get()}')
         self.parent.destroy()
 class NewDonor(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
