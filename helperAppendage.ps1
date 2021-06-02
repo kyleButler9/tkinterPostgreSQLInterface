@@ -1,8 +1,7 @@
-Add-OdbcDsn -Name "PostgresForPS_live" -DriverName "PostgreSQL Unicode(x64)" -SetPropertyValue @("Server=192.168.1.3","Database=appendage","Port=7245","Username=postgres","Password=pcs4ppl123#") -DsnType "User"
+Add-OdbcDsn -Name "DEMO" -DriverName "PostgreSQL Unicode(x64)" -SetPropertyValue @("Server=IP","Database=DB","Port=PORT","Username=USER","Password=PASS") -DsnType "User"
 
 $conn = New-Object -comobject ADODB.Connection
-#$connStr = "Remote Provider={PostgreSQL};Data Source=192.168.1.3;location=appendage;Port=7245"
-$conn.Open("PostgresForPS_live")
+$conn.Open("DEMO")
 
 #query computer serialnumber and then get id associated with this sn from the beta.computers table.
 $dInfo = @{}
