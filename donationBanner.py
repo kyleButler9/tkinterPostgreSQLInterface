@@ -3,8 +3,9 @@ import tkinter as tk
 from tkinter import ttk
 from tkcalendar import Calendar
 import datetime
+from google_sheets import *
 
-from demoWriteSheet import *
+#from demoWriteSheet import *
 
 class DonationBanner(tk.Frame):
     def __init__(self,parent,*args,**kwargs):
@@ -101,6 +102,14 @@ class SelectDonation(tk.Frame,DBI):
         self.donationInfoDD = tk.OptionMenu(parent,self.donorInfoVar,*donationInfo)
         self.donationFilter = tk.Entry(parent,fg='black',bg='white',width=10)
         donationFilterLabel = tk.Label(parent,text='filter donation names via:')
+        self.initGoogleSheetB = tk.Button(parent,
+            text='New Google Sheet',
+            width = 15,
+            height = 2,
+            bg = "blue",
+            fg = "yellow",
+        )
+        self.initGoogleSheetB.bind('<Button-1>',self.newGS)
         self.passBackSelection = tk.Button(parent,
             text='Pass Back Selection',
             width = 15,
@@ -131,6 +140,7 @@ class SelectDonation(tk.Frame,DBI):
         self.donationFilter.grid(column=1,row=0)
         self.donationInfoDD.grid(row=1,column=1)
         self.passBackSelection.grid(row=2,column=1)
+        self.initGoogleSheetB.grid(row=2,column=0)
     def NewDonationPopUp(self,event):
         popUp = tk.Toplevel(self.parent)
         NewDonation(popUp,
@@ -153,6 +163,24 @@ class SelectDonation(tk.Frame,DBI):
             dinfoStr = str(dInfo[0]) + ', '+dInfo[1].strftime('%m/%d/%y')+', '+str(dInfo[2])
             self.donationInfoDD['menu'].add_command(label=dinfoStr,
                 command=tk._setit(self.donorInfoVar,dinfoStr))
+    def newGS(self,event):
+        var = self.donorInfoVar.get().split(',')
+        get_lot_info = \
+        """
+        SELECT d.name,l.lotnumber
+        FROM beta.donors d
+        INNER JOIN beta.donations l USING (donor_id)
+        WHERE donation_id = %s;
+        """
+        lot_info = self.fetchone(get_lot_info,self.donationIDVar.get())
+        self.sheet_id.set(create_Sanitization_Sheet(str(lot_info[1]) + ' - '+str(lot_info[0])+' - Data Sanitization & QC Log'))
+        self.updateSheetID()
+        self.google_sheets=UpdateSheets(self,
+                            donation_id=self.donationIDVar.get(),
+                            ini_section=self.ini_section)
+        self.google_sheets.donation_id=self.donationIDVar.get()
+        self.google_sheets.overWrite_sanitization(sheet_id=self.sheet_id.get())
+        print(f'Active Sheet: \n\n\t\t https://docs.google.com/spreadsheets/d/{self.sheet_id.get()}')
     def updateBanner(self,event):
         var = self.donorInfoVar.get().split(',')
         self.companyNameVar.set("Donor Name: "+var[0])
@@ -183,16 +211,25 @@ class SelectDonation(tk.Frame,DBI):
             """
             lot_info = self.fetchone(get_lot_info,self.donationIDVar.get())
             self.sheet_id.set(create_Sanitization_Sheet(str(lot_info[1]) + ' - '+str(lot_info[0])+' - Data Sanitization & QC Log'))
-            update_db_with_sheetid = \
-            """
-            UPDATE beta.donations
-            SET sheetid = %s
-            WHERE donation_id = %s;
-            """
-            self.insertToDB(update_db_with_sheetid,
-                    self.sheet_id.get(),self.donationIDVar.get())
+            self.updateSheetID()
         print(f'Active Sheet: \n\n\t\t https://docs.google.com/spreadsheets/d/{self.sheet_id.get()}')
         self.parent.destroy()
+    def updateSheetID(self):
+        # include checks that sheet_id.get() and donationIDVar.get()
+        # are returning reasonable values, and take different action if not
+        # such as self.err.set('no donation selected.')
+        # alternatively, trigger a pop up if sheet_id.get() is blank
+        # with an entry for someone to put in a http address to a sheet,
+        # or just the spreadsheet id, and have it update
+        update_db_with_sheetid = \
+        """
+        UPDATE beta.donations
+        SET sheetid = %s
+        WHERE donation_id = %s;
+        """
+        self.insertToDB(update_db_with_sheetid,
+                self.sheet_id.get(),self.donationIDVar.get())
+        return self
 class NewDonor(tk.Frame,DBI):
     def __init__(self,parent,*args,**kwargs):
         tk.Frame.__init__(self,parent,*args)

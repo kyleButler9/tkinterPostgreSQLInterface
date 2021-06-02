@@ -8,9 +8,9 @@ from Barcode_Scanner_Entries import *
 from google_sheets import *
 
 # note:
-#   You can insert just an asset tag and it will go into the beta.donatedgoods table
-#   having PC ID NULL and HD ID NULL. It will not be in the reports though in their
-#   current iteration.
+# You can insert just an asset tag and it will go into the beta.donatedgoods table
+# having PC ID NULL and HD ID NULL. It will not be in the reports though in their
+# current iteration.
 
 @dataclass(order=True,frozen=True)
 class NonBarcode_Vals:
@@ -32,6 +32,18 @@ class Barcode_Vals:
     hd_sn: str = None
     asset_tag: str = None
 
+@dataclass(frozen=True)
+class Full_Form:
+    pc_id: str = None
+    pc_sn: str = None
+    hd_id: str = None
+    hd_sn: str = None
+    asset_tag: str = None
+    donation_id: int = None
+    staff_name: str = "staff:"
+    type_name: str = "device type:"
+    quality_name: str = "quality:"
+
 # id, p_id,hd_id,donation_id;
 # this is the order of keys that comes outta the insert device query
 # whenever you hit insert.
@@ -49,6 +61,7 @@ class UpdateSql:
     args : tuple[str] = field(default_factory=tuple)
 
 class InsertDeviceType(tk.Frame,DBI):
+    # this class is the new device type pop up
     def __init__(self,parent,*args,**kwargs):
         self.parent=parent
         tk.Frame.__init__(self,parent,*args)
@@ -399,6 +412,7 @@ class Review(InsertDrives):
         self.parent = parent
         self.ini_section=kwargs['ini_section']
         self.donationID=kwargs['donationID']
+        self.dg_id=None
         self.google_sheets=UpdateSheets(self,
                             donation_id=self.donationID.get(),
                             ini_section=self.ini_section)
@@ -408,6 +422,11 @@ class Review(InsertDrives):
             sheet_id_var=kwargs['sheet_id_var'],
             lastDevice_info=kwargs['lastDevice_info'],
             lastDevice_nonBarCode=kwargs['lastDevice_nonBarCode'])
+        self.insertDeviceButton['text']='Update'
+        self.entries.pc_id['bg']='gray'
+        self.entries.hd_id['bg']='gray'
+        self.entries.bind_or_unbind(None)
+
         self.repopulate_form = tk.Button(parent,
             text='Get Last Submission',
             width = 15,
@@ -415,9 +434,39 @@ class Review(InsertDrives):
             bg = "blue",
             fg = "yellow",
         )
-        self.repopulate_form.bind('<Button-1>',self.repopulate)
+        self.repopulate_form.bind('<Button-1>',self.repop_with_previous_row)
         self.repopulate_form.grid()
-    def repopulate(self,event):
+    def repop_with_previous_row(self,event):
+        if self.donationID.get():
+            self._dg_id_update()
+        else:
+            print('no donation selected')
+            self.err.set('Please Select Donation.')
+            return self
+        get_previous_row_sql = \
+        """
+        SELECT COALESCE(c.pid,''),COALESCE(c.sn,''),COALESCE(hd.hdpid,''),COALESCE(hd.hdsn,''),
+               COALESCE(dg.assetTag,''),dg.donation_id,s.name,dt.devicetype,q.quality
+        FROM beta.donatedgoods dg
+        LEFT OUTER JOIN beta.staff s ON dg.staff_id=s.staff_id
+        LEFT OUTER JOIN beta.harddrives hd USING (hd_id)
+        LEFT OUTER JOIN beta.computers c USING (pc_id)
+        LEFT OUTER JOIN beta.devicetypes dt USING (type_id)
+        LEFT OUTER JOIN beta.qualities q USING (quality_id)
+        WHERE dg.donation_id = %s
+        AND dg.id = %s;
+        """
+        row_back = self.fetchone(get_previous_row_sql,self.donationID.get(),self.dg_id)
+        if row_back and len(row_back) >0:
+            self.update_last_device_log(None,Barcode_Vals(*row_back[:5]),NonBarcode_Vals(*row_back[5:]))
+            self.repopulate()
+            self.google_sheets.donation_id=self.donationID.get()
+            self.google_sheets.overWrite_sanitization()
+        else:
+            self.err.set('No Rows Found')
+            self.dg_id=1e8
+        return self
+    def repopulate(self):
         self.clear_form()
         for key in self.lastDevice.get_entryfield_names():
             getattr(self.entries,key).insert(0,getattr(self.lastDevice,key).get())
@@ -426,9 +475,26 @@ class Review(InsertDrives):
         self.qualityName.set(self.lastDevice_nonBarCode.quality_name.get())
         #getattr(self.entries,key).insert(0,getattr(self.lastDevice_nonBarCode,key).get())
         return self
+    def _dg_id_update(self):
+        getNextID = \
+        """
+        SELECT max(id)
+        FROM beta.donatedgoods
+        WHERE donation_id = %s
+        and id < %s;
+        """
+        if not self.dg_id:
+            self.dg_id=1e8
+        dg_id_tup = self.fetchone(getNextID,self.donationID.get(),self.dg_id)
+        if dg_id_tup and len(dg_id_tup) == 1:
+            self.dg_id = dg_id_tup[0]
+        else:
+            self.dg_id=None
+        return self
     def insertDevice(self,event):
+        if not self.dg_id:
+            self._dg_id_update()
         nonBarcode_Commands=tuple()
-
         donatedgoods_vals = tuple()
         donatedgoods_command=str()
         donatedgoods_command += "Update beta.donatedgoods "
@@ -448,7 +514,7 @@ class Review(InsertDrives):
             donatedgoods_command += "staff_id=(SELECT staff_id from beta.staff where name = %s) "
             donatedgoods_vals+= (self.staffName.get(),)
         donatedgoods_command+="Where id=%s" + ';'
-        donatedgoods_vals +=(self.lastDevice.table_keys.dg,)
+        donatedgoods_vals +=(self.dg_id,)
         donatedgoods_sql = UpdateSql(donatedgoods_command,donatedgoods_vals)
         if isChanged:
             nonBarcode_Commands+=(donatedgoods_sql,)
@@ -471,12 +537,38 @@ class Review(InsertDrives):
             computers_command += "quality_id=(SELECT quality_id from beta.qualities where quality = %s)" + ' '
             computers_vals+=(self.qualityName.get(),)
         computers_command+="WHERE pc_id=(SELECT pc_id from beta.donatedgoods where id = %s);"
-        computers_vals +=(self.lastDevice.table_keys.dg,)
+        computers_vals +=(self.dg_id,)
         if isChanged:
             isChanged=False
             nonBarcode_Commands +=(UpdateSql(computers_command,computers_vals),)
 
         barcode_commands=tuple()
+        if getattr(self.entries,'pc_id').index('end') !=0 and len(getattr(self.lastDevice,'pc_id').get())==0:
+            if getattr(self.entries,'pc_sn').index('end') !=0:
+                pcs_command ="""
+                WITH pc_update as (
+                    INSERT INTO beta.computers(pid,sn)
+                    VALUES(%s,%s)
+                    RETURNING pc_id
+                )
+                UPDATE beta.donatedgoods
+                SET pc_id = (SELECT pc_id from hd_update)
+                WHERE id=%s;
+                """
+                pcs_vals = tuple([getattr(self.entries,'hd_id').get(),getattr(self.entries,'hd_sn').get(),self.dg_id])
+            else:
+                pcs_command ="""
+                WITH pc_update as (
+                    INSERT INTO beta.computers(pid)
+                    VALUES(%s)
+                    RETURNING pc_id
+                )
+                UPDATE beta.donatedgoods
+                SET pc_id = (SELECT pc_id from hd_update)
+                WHERE id=%s;
+                """
+                pcs_vals = tuple([getattr(self.entries,'hd_id').get(),self.dg_id])
+            barcode_commands+=(UpdateSql(pcs_command,pcs_vals),)
         if getattr(self.entries,'pc_sn').get() !=getattr(self.lastDevice,'pc_sn').get():
             computers_command ="""
             Update beta.computers
@@ -487,8 +579,34 @@ class Review(InsertDrives):
                  WHERE id=%s);
             """
             computers_vals = tuple([getattr(self.entries,'pc_sn').get(),
-                                    self.lastDevice.table_keys.dg])
+                                    self.dg_id])
             barcode_commands+=(UpdateSql(computers_command,computers_vals),)
+        if getattr(self.entries,'hd_id').index('end') !=0 and len(getattr(self.lastDevice,'hd_id').get())==0:
+            if getattr(self.entries,'hd_sn').index('end') !=0:
+                hds_command ="""
+                WITH hd_update as (
+                    INSERT INTO beta.harddrives(hdpid,hdsn)
+                    VALUES(%s,%s)
+                    RETURNING hd_id
+                )
+                UPDATE beta.donatedgoods
+                SET hd_id = (SELECT hd_id from hd_update)
+                WHERE id=%s;
+                """
+                hd_vals = tuple([getattr(self.entries,'hd_id').get(),getattr(self.entries,'hd_sn').get(),self.dg_id])
+            else:
+                hds_command ="""
+                WITH hd_update as (
+                    INSERT INTO beta.harddrives(hdpid)
+                    VALUES(%s)
+                    RETURNING hd_id
+                )
+                UPDATE beta.donatedgoods
+                SET hd_id = (SELECT hd_id from hd_update)
+                WHERE id=%s;
+                """
+                hd_vals = tuple([getattr(self.entries,'hd_id').get(),self.dg_id])
+            barcode_commands+=(UpdateSql(hds_command,hd_vals),)
         if getattr(self.entries,'hd_sn').get() !=getattr(self.lastDevice,'hd_sn').get():
             hds_command ="""
             Update beta.harddrives
@@ -498,7 +616,7 @@ class Review(InsertDrives):
                  FROM beta.donatedgoods
                  WHERE id=%s);
             """
-            hd_vals = tuple([getattr(self.entries,'hd_sn').get(),self.lastDevice.table_keys.dg])
+            hd_vals = tuple([getattr(self.entries,'hd_sn').get(),self.dg_id])
             barcode_commands+=(UpdateSql(hds_command,hd_vals),)
         if getattr(self.entries,'asset_tag').get() !=getattr(self.lastDevice,'asset_tag').get():
             dg_command ="""
@@ -506,11 +624,26 @@ class Review(InsertDrives):
             SET assettag = %s
             WHERE id =%s;
             """
-            dg_vals = tuple([getattr(self.entries,'asset_tag').get(),self.lastDevice.table_keys.dg])
+            dg_vals = tuple([getattr(self.entries,'asset_tag').get(),self.dg_id])
             barcode_commands+=(UpdateSql(dg_command,dg_vals),)
         for sql in nonBarcode_Commands + barcode_commands:
             out=self.insertToDB(sql.msg,*sql.args)
-            print(out)
+        get_previous_row_sql = \
+        """
+        SELECT COALESCE(c.pid,''),COALESCE(c.sn,''),COALESCE(hd.hdpid,''),COALESCE(hd.hdsn,''),
+               COALESCE(dg.assetTag,''),dg.donation_id,s.name,dt.devicetype,q.quality
+        FROM beta.donatedgoods dg
+        LEFT OUTER JOIN beta.staff s ON dg.staff_id=s.staff_id
+        LEFT OUTER JOIN beta.harddrives hd USING (hd_id)
+        LEFT OUTER JOIN beta.computers c USING (pc_id)
+        LEFT OUTER JOIN beta.devicetypes dt USING (type_id)
+        LEFT OUTER JOIN beta.qualities q USING (quality_id)
+        WHERE dg.donation_id = %s
+        AND dg.id = %s;
+        """
+        row_back = self.fetchone(get_previous_row_sql,self.donationID.get(),self.dg_id)
+        if row_back and len(row_back) >0:
+            self.update_last_device_log(None,Barcode_Vals(*row_back[:5]),NonBarcode_Vals(*row_back[5:]))
         self.google_sheets.donation_id=self.donationID.get()
         self.google_sheets.overWrite_sanitization()
 
@@ -532,6 +665,14 @@ class extractionGUI(ttk.Notebook):
             donationID=donationIDVar,
             lastDevice_info=lastDevice,
             lastDevice_nonBarCode=lastDevice_nonBarCode)
+        # note: binding is working on root
+        # root is special for keybinding -- no matter where your "focus",
+        # i.e. cursor, is this key will trigger this action.
+        # Because we're inserting a form here, we could be shooting blanks and
+        # need to account for that.
+        # You can pass root as an arg or kwarg to classes to give them the power to
+        # change the root binding, or google about it and you can adjust keybindings
+        # based on focus and more.
         parent.bind('<Control-space>',Obj.insertDevice)
         self.tab2 = ttk.Frame()
         Review(self.tab2,Barcode_Vals,

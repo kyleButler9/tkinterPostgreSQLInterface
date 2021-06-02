@@ -51,10 +51,12 @@ class Entry_Form(tk.Frame):
     def get_entryfield_names(self):
         return self.EV_field_names
 
-# this object will be used to enable toggling between keyboard and  barcode scanner modes of input
+# this object will be used to enable toggling between keyboard and barcode scanner modes of input
 class BarcodeScannerMode(Entry_Form):
     #note: this class is not finished. It still needs help
-    # this is not the best way to handle scanner vs. keyboard
+    # tasks: need to add consideration of backspace key to ignore it
+    # right now, backspace key causes two characters erasures when scanner mode engaged
+    # also, need to set threshold
     def __init__(self,parent,ROW,Entry_Vals,*args,**kwargs):
         self.parent=parent
         # this button toggles between Keyboard mode and Scanner mode.

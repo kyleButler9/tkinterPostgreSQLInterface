@@ -21,6 +21,8 @@ def config(ini_file='database.ini', ini_section='local_launcher'):
 
 class DBI:
     def __init__(self,**kwargs):
+        # at the start of every scession need to run "set search_path = beta;"
+        # then you can drop beta. everywhere
         if 'ini_section' in kwargs:
             self.ini_section = kwargs['ini_section']
         self.connectToDB(self.ini_section)

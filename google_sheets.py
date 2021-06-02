@@ -120,10 +120,10 @@ def append_to_sheet(*args):
     try:
         spreadsheet_id, values = args
     except ValueError:
-        print('DEMO VALS USED - Navigate to: \n\n\thttps://docs.google.com/spreadsheets/d/1Ayl6fnWNx1doFUhdrLKJRKi7vksYh-h2lFDD2kJ8n7A')
         # that's values -> [columns] -> [[row],[row]]
         values = [[1,2,3],['a','b','c']]
         spreadsheet_id='1Ayl6fnWNx1doFUhdrLKJRKi7vksYh-h2lFDD2kJ8n7A'
+        print('DEMO VALS {0} USED - Navigate to: \n\n\thttps://docs.google.com/spreadsheets/d/{1}'.format(values,spreadsheet_id))
     service = build('sheets', 'v4', credentials=creds())
 
     # Call the Sheets API
@@ -185,7 +185,7 @@ class UpdateSheets(DBI):
         """
         SELECT hd.hdsn, TO_CHAR(qc.qcDate,'MM/DD/YYYY'),s.nameabbrev
         FROM beta.qualitycontrol qc
-        INNER JOIN beta.staff s USING (staff_id)
+        LEFT OUTER JOIN beta.staff s USING (staff_id)
         INNER JOIN beta.harddrives hd USING (hd_id)
         INNER JOIN beta.donatedgoods g USING (hd_id)
         WHERE g.donation_id = %s;
@@ -220,13 +220,13 @@ class UpdateSheets(DBI):
             try:
                 sheet_id = self.fetchone(get_sheet_id,self.donation_id)[0]
             except:
-                print('no sheet id returned for that lot')
-                print('returned:',self.fetchone(get_sheet_id,self.donation_id))
+                print('no sheet id returned for that lot.')
+                print('\nQuery returned:',self.fetchone(get_sheet_id,self.donation_id))
         get_donationInfo = \
             """
             SELECT d.name, don.dateReceived, don.lotNumber
-            FROM beta.donors d
-            INNER JOIN beta.donations don USING (donor_id)
+            FROM beta.donations don
+            INNER JOIN beta.donors d USING (donor_id)
             WHERE don.donation_id = %s;
             """
         donationInfo=self.fetchone(get_donationInfo,self.donation_id)
